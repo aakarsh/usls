@@ -74,18 +74,40 @@ int main(int argc,char * argv[]){
   return 0;
 }
 
-int list_directory_cmd(const char* pwd) {
+enum filetype{
+    unknown,
+    fifo,
+    chardev,
+    directory,
+    blockdev,
+    normal,
+    symbolic_link,
+    sock,
+    whiteout,
+    arg_directory
+};
 
+struct fileinfo 
+{
+  char* name;
+  enum filetype type;
+  
+};
+
+
+int list_directory_cmd(const char* pwd) {
   printf("%s :\n",pwd);
   DIR* dir = opendir(pwd);
   struct dirent * entry;  
 
   int first = 1;
   while (NULL!= (entry = readdir(dir))) {    
+
     if(first){
       printf("%6s\t%10s\t%10s\t\n","Type","Inode#","Name");
       first = 0;
     }
+
     const char* desc;
     switch(entry->d_type){
     case DT_BLK:
@@ -95,10 +117,10 @@ int list_directory_cmd(const char* pwd) {
       desc = "Char";
       break;
     case DT_REG:
-      desc = "File";
+      desc = "-";
       break;
     case DT_DIR:
-      desc = "Dir";
+      desc = "d";
       break;
     case DT_FIFO:
       desc = "FIFO ";
@@ -119,7 +141,9 @@ int list_directory_cmd(const char* pwd) {
   closedir(dir);
   return 0;
 }
+
 int file_status_cmd(const char* file_name ){
+  
   struct stat sb ;
   int ret = stat(file_name,&sb);
   if(ret){
