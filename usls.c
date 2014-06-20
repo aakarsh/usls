@@ -1,9 +1,11 @@
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <dirent.h>
 
 /**
  *   Adapted from ALS.
@@ -13,18 +15,20 @@ const char* program_name;
 
 void print_usage_cmd(FILE* stream, int exit_code);
 int file_status_cmd(const char* file_name );
+int list_directory_cmd(const char* dir);
 
 int main(int argc,char * argv[]){
 
   program_name = argv[0];
 
-  int verbose = 0;
+  int verbose = 0;  
   int next_opt = 0;
-  const char* short_options = "shv";
+  const char* short_options = "shvd";
 
   const struct option long_options[] = {
     {"help",0,NULL,'h'},
     {"status",0,NULL,'s'},
+    {"list-dir",0,NULL,'d'},
     {"verbose",1,NULL,'v'}
   };
 
@@ -46,6 +50,16 @@ int main(int argc,char * argv[]){
     case 'v':
       verbose = 1 ;
       break;
+    case 'd':
+      if(optind >= argc) {
+        char* dir  = get_current_dir_name();
+        list_directory_cmd(dir);
+        free(dir);
+      }else{
+        char* dir = argv[optind];
+        list_directory_cmd(dir);
+      }
+      break;
     case '?': // user specified invalid option
       print_usage_cmd(stderr,1);
     case -1:
@@ -55,9 +69,56 @@ int main(int argc,char * argv[]){
       abort();
     }
   } while (next_opt != -1);  
+
+
   return 0;
 }
 
+int list_directory_cmd(const char* pwd) {
+
+  printf("%s :\n",pwd);
+  DIR* dir = opendir(pwd);
+  struct dirent * entry;  
+
+  int first = 1;
+  while (NULL!= (entry = readdir(dir))) {    
+    if(first){
+      printf("%6s\t%10s\t%10s\t\n","Type","Inode#","Name");
+      first = 0;
+    }
+    const char* desc;
+    switch(entry->d_type){
+    case DT_BLK:
+      desc = "Block";
+      break;
+    case DT_CHR:
+      desc = "Char";
+      break;
+    case DT_REG:
+      desc = "File";
+      break;
+    case DT_DIR:
+      desc = "Dir";
+      break;
+    case DT_FIFO:
+      desc = "FIFO ";
+      break;
+    case DT_SOCK:
+      desc = "SOCK";
+      break;
+   default:
+     desc = "-";
+     break;    
+    }
+    printf("%6s\t",desc);
+    printf("%10ld\t",entry->d_ino);
+    printf("%10.10s",entry->d_name);
+
+    printf("\n");
+  }
+  closedir(dir);
+  return 0;
+}
 int file_status_cmd(const char* file_name ){
   struct stat sb ;
   int ret = stat(file_name,&sb);
