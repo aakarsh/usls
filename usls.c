@@ -1,11 +1,13 @@
 #include <unistd.h>
 #include <stdio.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <getopt.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <string.h>
 
 /**
  *   Adapted from ALS.
@@ -16,6 +18,7 @@ const char* program_name;
 void print_usage_cmd(FILE* stream, int exit_code);
 int file_status_cmd(const char* file_name );
 int list_directory_cmd(const char* dir);
+struct fileinfo* create_fileinfo(char* dir,struct dirent* entry) ;
 
 int main(int argc,char * argv[]){
 
@@ -90,58 +93,144 @@ enum filetype{
 struct fileinfo 
 {
   char* name;
+  char* path;
   enum filetype type;
-  
+  size_t size;
+  ino_t inode_num;
 };
 
+int fi_cmp_name(const void * i1, const void* i2){
+   struct fileinfo** fi1 = (struct fileinfo**)i1;
+   struct fileinfo** fi2 = (struct fileinfo**)i2;
+   return strcmp((*fi1)->name,(*fi2)->name);
+}
+
+int fi_cmp_size(const void * i1, const void* i2){
+   struct fileinfo** fi1 = (struct fileinfo**)i1;
+   struct fileinfo** fi2 = (struct fileinfo**)i2;
+   return (*fi1)->size > (*fi2)->size;
+}
 
 int list_directory_cmd(const char* pwd) {
-  printf("%s :\n",pwd);
+
+  printf("%s :\n",pwd);  
   DIR* dir = opendir(pwd);
   struct dirent * entry;  
 
-  int first = 1;
+  int num_entries = 0;
+  int alloc_entries = 100;
+
+  struct fileinfo** files = malloc(alloc_entries*sizeof(struct fileinfo *));
+
   while (NULL!= (entry = readdir(dir))) {    
+    files[num_entries++] = create_fileinfo(pwd,entry);
 
-    if(first){
-      printf("%6s\t%10s\t%10s\t\n","Type","Inode#","Name");
-      first = 0;
+    if(num_entries>alloc_entries){
+      files = realloc(files,alloc_entries);
+      alloc_entries*=2;
     }
+  }
 
-    const char* desc;
-    switch(entry->d_type){
-    case DT_BLK:
+  qsort(files,num_entries,sizeof(struct fileinfo*),  &fi_cmp_name);
+
+  int i;
+  for( i =0 ; i < num_entries; i++){
+    print_file_info(i==0,files[i]);
+    free(files[i]);
+  }
+
+
+  closedir(dir);
+  return 0;
+}
+
+void file_type_desc(char** s,enum filetype type) {
+  const char* desc;
+    switch(type){
+    case blockdev:
       desc = "Block";
       break;
-    case DT_CHR:
+    case chardev:
       desc = "Char";
       break;
-    case DT_REG:
+    case normal:
       desc = "-";
       break;
-    case DT_DIR:
+    case directory:
       desc = "d";
       break;
-    case DT_FIFO:
+    case fifo:
       desc = "FIFO ";
       break;
-    case DT_SOCK:
+    case sock:
       desc = "SOCK";
       break;
    default:
      desc = "-";
      break;    
     }
-    printf("%6s\t",desc);
-    printf("%10ld\t",entry->d_ino);
-    printf("%10.10s",entry->d_name);
-
-    printf("\n");
-  }
-  closedir(dir);
-  return 0;
+    *s = strdup(desc);
 }
 
+void print_file_info(int heading,struct fileinfo* fi){
+    if(heading){
+      printf("%6s\t%10s\t%10s%10s\t\n","Type","Inode#","Size","Name");
+    }
+    char* desc;
+    file_type_desc(&desc,fi->type);
+    printf("%6s\t",desc);
+    free(desc);
+    printf("%10ld\t",fi->inode_num);
+    printf("%10ld\t",fi->size);
+    printf("%10.10s",fi->name);
+    printf("\n");  
+}
+
+struct fileinfo* create_fileinfo(char* dir_path,struct dirent* entry) {
+  struct fileinfo* fi = malloc(sizeof(struct fileinfo));
+  fi->name = strdup(entry->d_name);
+  asprintf(&fi->path,"%s/%s",dir_path,entry->d_name);
+
+  struct stat sb ;
+  int ret = stat(fi->path,&sb);
+
+  if(ret){
+    perror("stat");
+    return NULL;    
+  }
+  
+  fi->size = sb.st_size;
+  fi->inode_num = sb.st_ino;
+
+  enum filetype ft;
+
+  switch(entry->d_type){
+  case DT_BLK:
+    ft = blockdev;
+    break;
+  case DT_CHR:
+    ft = chardev;
+    break;
+  case DT_REG:
+    ft = normal;
+    break;
+  case DT_DIR:
+    ft = directory;
+    break;
+  case DT_FIFO:
+    ft = fifo;
+    break;
+  case DT_SOCK:
+    ft = sock;
+    break;
+  default:
+    ft = unknown;
+    break;    
+  }
+  fi->type = ft;
+
+  return fi;
+}
 int file_status_cmd(const char* file_name ){
   
   struct stat sb ;
