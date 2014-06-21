@@ -19,7 +19,7 @@
 const char* program_name;
 
 
-enum ls_sort_by{ sort_by_filename , sort_by_size, sort_by_ctime };
+enum ls_sort_by{ sort_by_filename , sort_by_size, sort_by_mtime };
 
 enum ls_listing_type{ listing_type_simple, listing_type_long };
 
@@ -51,13 +51,14 @@ int main(int argc,char * argv[]){
   config.sort_by = sort_by_filename;
   config.listing_type = listing_type_simple;
 
-  const char* short_options = "rSshvl";
+  const char* short_options = "rSshvlt";
 
   const struct option long_options[] = {
     {"help",0,NULL,'h'},
     {"status",0,NULL,'s'},
     {"sort-size",0,NULL,'S'},
     {"reverse",0,NULL,'r'},
+    {NULL,0,NULL,'t'},
     {"long",0,NULL,'l'},
     {"verbose",1,NULL,'v'}
   };
@@ -72,6 +73,9 @@ int main(int argc,char * argv[]){
       break;
     case 'r':
       config.sort_reverse = 1;
+      break;
+    case 't':
+      config.sort_by = sort_by_mtime;
       break;
     case 'S':
       config.sort_by = sort_by_size;
@@ -128,6 +132,13 @@ struct fileinfo
 
 };
 
+// Macros
+int fi_cmp_mtime(const void * i1, const void* i2){
+   struct fileinfo** fi1 = (struct fileinfo**)i1;
+   struct fileinfo** fi2 = (struct fileinfo**)i2;
+   return (*fi1)->stat->st_mtime < (*fi2)->stat->st_mtime;
+}
+
 int fi_cmp_name(const void * i1, const void* i2){
    struct fileinfo** fi1 = (struct fileinfo**)i1;
    struct fileinfo** fi2 = (struct fileinfo**)i2;
@@ -174,6 +185,9 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
   switch(config->sort_by) {
   case sort_by_size:
     qsort(files,num_entries,sizeof(struct fileinfo*), &fi_cmp_size);
+    break;
+  case sort_by_mtime:
+    qsort(files,num_entries,sizeof(struct fileinfo*), &fi_cmp_mtime);
     break;
   default:
     qsort(files,num_entries,sizeof(struct fileinfo*), &fi_cmp_name);
