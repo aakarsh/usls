@@ -19,7 +19,7 @@
 const char* program_name;
 
 
-enum ls_sort_by{ sort_by_filename , sort_by_size, sort_by_mtime };
+enum ls_sort_by{ sort_by_nosort,sort_by_filename , sort_by_size, sort_by_mtime };
 
 enum ls_listing_type{ listing_type_simple, listing_type_long };
 
@@ -51,10 +51,11 @@ int main(int argc,char * argv[]){
   config.sort_by = sort_by_filename;
   config.listing_type = listing_type_simple;
 
-  const char* short_options = "rSshvlt";
+  const char* short_options = "rSshvltU";
 
   const struct option long_options[] = {
     {"help",0,NULL,'h'},
+    {NULL,0,NULL,'U'},
     {"status",0,NULL,'s'},
     {"sort-size",0,NULL,'S'},
     {"reverse",0,NULL,'r'},
@@ -73,6 +74,9 @@ int main(int argc,char * argv[]){
       break;
     case 'r':
       config.sort_reverse = 1;
+      break;
+    case 'U':
+      config.sort_by = sort_by_nosort;
       break;
     case 't':
       config.sort_by = sort_by_mtime;
@@ -183,6 +187,7 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
   
   //Sorting
   switch(config->sort_by) {
+  case sort_by_nosort: break;
   case sort_by_size:
     qsort(files,num_entries,sizeof(struct fileinfo*), &fi_cmp_size);
     break;
@@ -304,19 +309,7 @@ struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry) {
   }
   
   fi->stat = file_stat;
-  /*
-  fi->size = sb.st_size;
-  fi->inode_num = sb.st_ino;
-  fi->uid = sb.st_uid;     
-  fi->gid = sb.st_gid;     
-  fi->rdev = sb.st_rdev;    
-  fi->blksize = sb.st_blksize; 
-  fi->blocks = sb.st_blocks;  
-  fi->atime = sb.st_atime;   
-  fi->mtime = sb.st_mtime;   
-  fi->mode = sb.st_mode;   
-  fi->ctime = sb.st_ctime;   
-  */
+
   enum filetype ft;
 
   switch(entry->d_type){
