@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <string.h>
+#include <time.h>
 
 /**
  *   Adapted from ALS.
@@ -18,7 +19,8 @@ const char* program_name;
 void print_usage_cmd(FILE* stream, int exit_code);
 int file_status_cmd(const char* file_name );
 int list_directory_cmd(const char* dir);
-struct fileinfo* create_fileinfo(char* dir,struct dirent* entry) ;
+struct fileinfo* create_fileinfo(const char* dir,struct dirent* entry) ;
+void print_fileinfo(int heading,struct fileinfo* fi);
 
 int main(int argc,char * argv[]){
 
@@ -56,10 +58,10 @@ int main(int argc,char * argv[]){
     case 'd':
       if(optind >= argc) {
         char* dir  = get_current_dir_name();
-        list_directory_cmd(dir);
+        list_directory_cmd((const char*)dir);
         free(dir);
       }else{
-        char* dir = argv[optind];
+        const char* dir = argv[optind];
         list_directory_cmd(dir);
       }
       break;
@@ -78,16 +80,16 @@ int main(int argc,char * argv[]){
 }
 
 enum filetype{
-    unknown,
-    fifo,
-    chardev,
-    directory,
-    blockdev,
-    normal,
-    symbolic_link,
-    sock,
-    whiteout,
-    arg_directory
+             unknown,
+              fifo,
+              chardev,
+              directory,
+              blockdev,
+              normal,
+              symbolic_link,
+              sock,
+              whiteout,
+              arg_directory 
 };
 
 struct fileinfo 
@@ -97,6 +99,14 @@ struct fileinfo
   enum filetype type;
   size_t size;
   ino_t inode_num;
+  uid_t     uid;     /* user ID of owner */
+  gid_t     gid;     /* group ID of owner */
+  dev_t     rdev;    /* device ID (if special file) */
+  blksize_t blksize; /* blocksize for file system I/O */
+  blkcnt_t  blocks;  /* number of 512B blocks allocated */
+  time_t    atime;   /* time of last access */
+  time_t    mtime;   /* time of last modification */
+  time_t    ctime;   /* time of last status change */
 };
 
 int fi_cmp_name(const void * i1, const void* i2){
@@ -109,6 +119,12 @@ int fi_cmp_size(const void * i1, const void* i2){
    struct fileinfo** fi1 = (struct fileinfo**)i1;
    struct fileinfo** fi2 = (struct fileinfo**)i2;
    return (*fi1)->size > (*fi2)->size;
+}
+
+int fi_cmp_type(const void * i1, const void* i2){
+   struct fileinfo** fi1 = (struct fileinfo**)i1;
+   struct fileinfo** fi2 = (struct fileinfo**)i2;
+   return (*fi1)->type > (*fi2)->type;
 }
 
 int list_directory_cmd(const char* pwd) {
@@ -131,20 +147,18 @@ int list_directory_cmd(const char* pwd) {
     }
   }
 
-  qsort(files,num_entries,sizeof(struct fileinfo*),  &fi_cmp_name);
+  qsort(files,num_entries,sizeof(struct fileinfo*), &fi_cmp_name);
 
   int i;
   for( i =0 ; i < num_entries; i++){
-    print_file_info(i==0,files[i]);
+    print_fileinfo(i==0,files[i]);
     free(files[i]);
   }
-
-
   closedir(dir);
   return 0;
 }
 
-void file_type_desc(char** s,enum filetype type) {
+void filetype_sdesc(char** s,enum filetype type) {
   const char* desc;
     switch(type){
     case blockdev:
@@ -172,21 +186,27 @@ void file_type_desc(char** s,enum filetype type) {
     *s = strdup(desc);
 }
 
-void print_file_info(int heading,struct fileinfo* fi){
+void print_fileinfo(int heading,struct fileinfo* fi){
     if(heading){
       printf("%6s\t%10s\t%10s%10s\t\n","Type","Inode#","Size","Name");
     }
     char* desc;
-    file_type_desc(&desc,fi->type);
+    filetype_sdesc(&desc,fi->type);
     printf("%6s\t",desc);
     free(desc);
     printf("%10ld\t",fi->inode_num);
     printf("%10ld\t",fi->size);
+
+    char mod_time[100];
+    strftime(mod_time,100,"%b %d %H:%M",localtime(&(fi->mtime)));
+    printf("%10s\t",mod_time);
     printf("%10.10s",fi->name);
+
+
     printf("\n");  
 }
 
-struct fileinfo* create_fileinfo(char* dir_path,struct dirent* entry) {
+struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry) {
   struct fileinfo* fi = malloc(sizeof(struct fileinfo));
   fi->name = strdup(entry->d_name);
   asprintf(&fi->path,"%s/%s",dir_path,entry->d_name);
@@ -201,6 +221,14 @@ struct fileinfo* create_fileinfo(char* dir_path,struct dirent* entry) {
   
   fi->size = sb.st_size;
   fi->inode_num = sb.st_ino;
+  fi->uid = sb.st_uid;     
+  fi->gid = sb.st_gid;     
+  fi->rdev = sb.st_rdev;    
+  fi->blksize = sb.st_blksize; 
+  fi->blocks = sb.st_blocks;  
+  fi->atime = sb.st_atime;   
+  fi->mtime = sb.st_mtime;   
+  fi->ctime = sb.st_ctime;   
 
   enum filetype ft;
 
@@ -231,14 +259,16 @@ struct fileinfo* create_fileinfo(char* dir_path,struct dirent* entry) {
 
   return fi;
 }
+
 int file_status_cmd(const char* file_name ){
   
   struct stat sb ;
-  int ret = stat(file_name,&sb);
-  if(ret){
+  int err = stat(file_name,&sb);
+  if(err){
     perror("stat");
     return 1;    
   }
+
   const char* desc = 
      "File Name: %s \n"
      "Device Id: %ld\n"

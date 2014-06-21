@@ -1,7 +1,7 @@
 all: usls.c
-	gcc -g -Wall -o usls usls.c
+	gcc -g -Wall -o u usls.c
 	global -u
 
 clean:
-	$(RM) usls
+	$(RM) u
 
