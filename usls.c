@@ -9,6 +9,8 @@
 #include <dirent.h>
 #include <string.h>
 #include <time.h>
+#include <grp.h>
+#include <pwd.h>
 
 /**
  *   Adapted from ALS.
@@ -21,6 +23,7 @@ int file_status_cmd(const char* file_name );
 int list_directory_cmd(const char* dir);
 struct fileinfo* create_fileinfo(const char* dir,struct dirent* entry) ;
 void print_fileinfo(int heading,struct fileinfo* fi);
+void file_mode_string(mode_t md,char* str);
 
 int main(int argc,char * argv[]){
 
@@ -28,12 +31,12 @@ int main(int argc,char * argv[]){
 
   int verbose = 0;  
   int next_opt = 0;
-  const char* short_options = "shvd";
+  const char* short_options = "shvl";
 
   const struct option long_options[] = {
     {"help",0,NULL,'h'},
     {"status",0,NULL,'s'},
-    {"list-dir",0,NULL,'d'},
+    {"long",0,NULL,'l'},
     {"verbose",1,NULL,'v'}
   };
 
@@ -55,7 +58,7 @@ int main(int argc,char * argv[]){
     case 'v':
       verbose = 1 ;
       break;
-    case 'd':
+    case 'l':
       if(optind >= argc) {
         char* dir  = get_current_dir_name();
         list_directory_cmd((const char*)dir);
@@ -74,13 +77,11 @@ int main(int argc,char * argv[]){
       abort();
     }
   } while (next_opt != -1);  
-
-
   return 0;
 }
 
 enum filetype{
-             unknown,
+              unknown,
               fifo,
               chardev,
               directory,
@@ -97,6 +98,7 @@ struct fileinfo
   char* name;
   char* path;
   enum filetype type;
+  mode_t mode;
   size_t size;
   ino_t inode_num;
   uid_t     uid;     /* user ID of owner */
@@ -185,17 +187,43 @@ void filetype_sdesc(char** s,enum filetype type) {
     }
     *s = strdup(desc);
 }
+void file_mode_string(mode_t md,char* str) {
+  strcpy(str,"---------");
+  if(md & S_IRUSR) str[0]='r';
+  if(md & S_IWUSR) str[1]='w';
+  if(md & S_IXUSR) str[2]='x';  
+
+  if(md & S_IRGRP) str[3] ='r';
+  if(md & S_IWGRP) str[4] ='w';
+  if(md & S_IXGRP) str[5] ='x';
+
+  if(md & S_IROTH) str[6] ='r';
+  if(md & S_IWOTH) str[7] ='w';
+  if(md & S_IXOTH) str[8] ='x';    
+}
 
 void print_fileinfo(int heading,struct fileinfo* fi){
-    if(heading){
-      printf("%6s\t%10s\t%10s%10s\t\n","Type","Inode#","Size","Name");
-    }
+    /* if(heading){
+     *   printf("%6s\t%10s\t%10s%10s\t\n","Type","Inode#","Size","Name");
+     * } */
     char* desc;
     filetype_sdesc(&desc,fi->type);
-    printf("%6s\t",desc);
+    printf("%1s",desc);
     free(desc);
-    printf("%10ld\t",fi->inode_num);
-    printf("%10ld\t",fi->size);
+    char mode_str[10];
+    file_mode_string(fi->mode,mode_str);
+    printf("%9s",mode_str);
+
+    struct passwd* pw = getpwuid(fi->uid);
+    printf("%10s",pw->pw_name);
+
+    struct group* group_info =  getgrgid(fi->gid);    
+    printf("%10s",group_info->gr_name);
+
+    // For now
+    //  printf("%10ld\t",fi->inode_num);
+
+    printf("%10ld  ",fi->size);
 
     char mod_time[100];
     strftime(mod_time,100,"%b %d %H:%M",localtime(&(fi->mtime)));
@@ -228,6 +256,7 @@ struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry) {
   fi->blocks = sb.st_blocks;  
   fi->atime = sb.st_atime;   
   fi->mtime = sb.st_mtime;   
+  fi->mode = sb.st_mode;   
   fi->ctime = sb.st_ctime;   
 
   enum filetype ft;
@@ -311,6 +340,7 @@ void print_usage_cmd(FILE* stream, int exit_code){
   fprintf(stream,
           "-h    --help    Display this usage information\n"
           "-s    --stat    Display detailed file status information\n"
+          "-l    --long    Display long list of information\n"
           "-v    --verbose Print verbose output \n");
   exit(exit_code);
 }
