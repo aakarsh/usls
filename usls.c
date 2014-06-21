@@ -18,9 +18,21 @@
 
 const char* program_name;
 
+
+enum ls_sort_by{ sort_by_filename , sort_by_size, sort_by_ctime };
+enum ls_listing_type{ listing_type_simple, listing_type_long };
+
+struct ls_config {
+  enum ls_sort_by sort_by;
+  int sorting_reverse;
+  enum ls_listing_type listing_type;  
+};
+
+
 void print_usage_cmd(FILE* stream, int exit_code);
 int file_status_cmd(const char* file_name );
-int list_directory_cmd(const char* dir);
+int list_directory_cmd(const char* pwd, struct ls_config* config) ;
+
 struct fileinfo* create_fileinfo(const char* dir,struct dirent* entry) ;
 void print_fileinfo(int heading,struct fileinfo* fi);
 void file_mode_string(mode_t md,char* str);
@@ -31,6 +43,9 @@ int main(int argc,char * argv[]){
 
   int verbose = 0;  
   int next_opt = 0;
+
+  struct ls_config config;
+
   const char* short_options = "shvl";
 
   const struct option long_options[] = {
@@ -59,14 +74,7 @@ int main(int argc,char * argv[]){
       verbose = 1 ;
       break;
     case 'l':
-      if(optind >= argc) {
-        char* dir  = get_current_dir_name();
-        list_directory_cmd((const char*)dir);
-        free(dir);
-      }else{
-        const char* dir = argv[optind];
-        list_directory_cmd(dir);
-      }
+      config.listing_type = listing_type_long;
       break;
     case '?': // user specified invalid option
       print_usage_cmd(stderr,1);
@@ -77,20 +85,24 @@ int main(int argc,char * argv[]){
       abort();
     }
   } while (next_opt != -1);  
+
+
+  char* dir;
+  if(optind >= argc) {
+    dir = get_current_dir_name();
+  } else{
+    dir = strdup(argv[optind]);
+  }
+  
+  list_directory_cmd(dir,&config);
+
+  free(dir);  
+
   return 0;
 }
 
-enum filetype{
-              unknown,
-              fifo,
-              chardev,
-              directory,
-              blockdev,
-              normal,
-              symbolic_link,
-              sock,
-              whiteout,
-              arg_directory 
+enum filetype { unknown,fifo,chardev,directory,blockdev,
+              normal,symbolic_link,sock,whiteout,arg_directory 
 };
 
 struct fileinfo 
@@ -98,17 +110,9 @@ struct fileinfo
   char* name;
   char* path;
   enum filetype type;
-  mode_t mode;
-  size_t size;
-  ino_t inode_num;
-  uid_t     uid;     /* user ID of owner */
-  gid_t     gid;     /* group ID of owner */
-  dev_t     rdev;    /* device ID (if special file) */
-  blksize_t blksize; /* blocksize for file system I/O */
-  blkcnt_t  blocks;  /* number of 512B blocks allocated */
-  time_t    atime;   /* time of last access */
-  time_t    mtime;   /* time of last modification */
-  time_t    ctime;   /* time of last status change */
+
+  struct stat* stat;
+
 };
 
 int fi_cmp_name(const void * i1, const void* i2){
@@ -120,7 +124,7 @@ int fi_cmp_name(const void * i1, const void* i2){
 int fi_cmp_size(const void * i1, const void* i2){
    struct fileinfo** fi1 = (struct fileinfo**)i1;
    struct fileinfo** fi2 = (struct fileinfo**)i2;
-   return (*fi1)->size > (*fi2)->size;
+   return (*fi1)->stat->st_size > (*fi2)->stat->st_size;
 }
 
 int fi_cmp_type(const void * i1, const void* i2){
@@ -129,16 +133,20 @@ int fi_cmp_type(const void * i1, const void* i2){
    return (*fi1)->type > (*fi2)->type;
 }
 
-int list_directory_cmd(const char* pwd) {
-
-  printf("%s :\n",pwd);  
+int list_directory_cmd(const char* pwd, struct ls_config* config) {
   DIR* dir = opendir(pwd);
-  struct dirent * entry;  
+
+  if(NULL == dir){
+    perror("opendir");
+    return 1;
+  }
 
   int num_entries = 0;
   int alloc_entries = 100;
 
   struct fileinfo** files = malloc(alloc_entries*sizeof(struct fileinfo *));
+
+  struct dirent * entry;  
 
   while (NULL!= (entry = readdir(dir))) {    
     files[num_entries++] = create_fileinfo(pwd,entry);
@@ -151,11 +159,13 @@ int list_directory_cmd(const char* pwd) {
 
   qsort(files,num_entries,sizeof(struct fileinfo*), &fi_cmp_name);
 
+  printf("total %d\n",num_entries);
   int i;
   for( i =0 ; i < num_entries; i++){
     print_fileinfo(i==0,files[i]);
     free(files[i]);
   }
+
   closedir(dir);
   return 0;
 }
@@ -211,24 +221,24 @@ void print_fileinfo(int heading,struct fileinfo* fi){
     printf("%1s",desc);
     free(desc);
     char mode_str[10];
-    file_mode_string(fi->mode,mode_str);
-    printf("%9s",mode_str);
+    file_mode_string(fi->stat->st_mode,mode_str);
+    printf("%9s ",mode_str);
 
-    struct passwd* pw = getpwuid(fi->uid);
-    printf("%10s",pw->pw_name);
+    struct passwd* pw = getpwuid(fi->stat->st_uid);
+    printf("%9s ",pw->pw_name);
 
-    struct group* group_info =  getgrgid(fi->gid);    
-    printf("%10s",group_info->gr_name);
+    struct group* group_info =  getgrgid(fi->stat->st_gid);    
+    printf("%9s ",group_info->gr_name);
 
     // For now
     //  printf("%10ld\t",fi->inode_num);
 
-    printf("%10ld  ",fi->size);
+    printf("%8ld ",fi->stat->st_size);
 
     char mod_time[100];
-    strftime(mod_time,100,"%b %d %H:%M",localtime(&(fi->mtime)));
-    printf("%10s\t",mod_time);
-    printf("%10.10s",fi->name);
+    strftime(mod_time,100,"%b %d %H:%M",localtime(&(fi->stat->st_mtime)));
+    printf("%9s ",mod_time);
+    printf("%s",fi->name);
 
 
     printf("\n");  
@@ -239,14 +249,16 @@ struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry) {
   fi->name = strdup(entry->d_name);
   asprintf(&fi->path,"%s/%s",dir_path,entry->d_name);
 
-  struct stat sb ;
-  int ret = stat(fi->path,&sb);
+  struct stat* file_stat = malloc(sizeof(struct stat));
 
+  int ret = stat(fi->path,file_stat);
   if(ret){
     perror("stat");
     return NULL;    
   }
   
+  fi->stat = file_stat;
+  /*
   fi->size = sb.st_size;
   fi->inode_num = sb.st_ino;
   fi->uid = sb.st_uid;     
@@ -258,7 +270,7 @@ struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry) {
   fi->mtime = sb.st_mtime;   
   fi->mode = sb.st_mode;   
   fi->ctime = sb.st_ctime;   
-
+  */
   enum filetype ft;
 
   switch(entry->d_type){
