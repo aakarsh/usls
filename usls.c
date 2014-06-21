@@ -20,11 +20,12 @@ const char* program_name;
 
 
 enum ls_sort_by{ sort_by_filename , sort_by_size, sort_by_ctime };
+
 enum ls_listing_type{ listing_type_simple, listing_type_long };
 
 struct ls_config {
   enum ls_sort_by sort_by;
-  int sorting_reverse;
+  int sort_reverse ;
   enum ls_listing_type listing_type;  
 };
 
@@ -46,11 +47,17 @@ int main(int argc,char * argv[]){
 
   struct ls_config config;
 
-  const char* short_options = "shvl";
+  config.sort_reverse = 0;
+  config.sort_by = sort_by_filename;
+  config.listing_type = listing_type_simple;
+
+  const char* short_options = "rSshvl";
 
   const struct option long_options[] = {
     {"help",0,NULL,'h'},
     {"status",0,NULL,'s'},
+    {"sort-size",0,NULL,'S'},
+    {"reverse",0,NULL,'r'},
     {"long",0,NULL,'l'},
     {"verbose",1,NULL,'v'}
   };
@@ -62,6 +69,12 @@ int main(int argc,char * argv[]){
     switch(next_opt){
     case 'h':
       print_usage_cmd(stdout,0);      
+      break;
+    case 'r':
+      config.sort_reverse = 1;
+      break;
+    case 'S':
+      config.sort_by = sort_by_size;
       break;
     case 's':
       if(optind > argc){
@@ -156,14 +169,33 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
       alloc_entries*=2;
     }
   }
+  
+  //Sorting
+  switch(config->sort_by) {
+  case sort_by_size:
+    qsort(files,num_entries,sizeof(struct fileinfo*), &fi_cmp_size);
+    break;
+  default:
+    qsort(files,num_entries,sizeof(struct fileinfo*), &fi_cmp_name);
+  }
 
-  qsort(files,num_entries,sizeof(struct fileinfo*), &fi_cmp_name);
+  if(config->sort_reverse) {
+    struct fileinfo* tmp;
+    int i;
+    for(i=0; i < (num_entries+1)/2 ;i++){
+      tmp = files[i];
+      files[i] = files[num_entries-i];
+      files[num_entries-i]=tmp;
+    }
+  }
 
   printf("total %d\n",num_entries);
   int i;
   for( i =0 ; i < num_entries; i++){
-    print_fileinfo(i==0,files[i]);
-    free(files[i]);
+    if(files[i]!=NULL){ // filtered files end up as null
+      print_fileinfo(i==0,files[i]);
+      free(files[i]);
+    }
   }
 
   closedir(dir);
