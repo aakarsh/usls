@@ -11,13 +11,13 @@
 #include <time.h>
 #include <grp.h>
 #include <pwd.h>
+#include <fnmatch.h>
+
 
 /**
  *   Adapted from ALS.
  */
-
 const char* program_name;
-
 
 enum ls_sort_by{ sort_by_nosort,sort_by_filename , sort_by_size, sort_by_mtime };
 
@@ -25,13 +25,19 @@ enum ls_listing_type{ listing_type_simple, listing_type_long };
 
 enum ls_filter_type {filter_type_none,filter_type_almost_none,filter_type_normal};
 
+struct ignore_pattern{
+  char* pattern;
+  struct ignore_pattern* next;
+};
+
 struct ls_config {
   int sort_reverse ;
   int recurse;
-
+  int filter_backups;
   enum ls_sort_by sort_by;
   enum ls_filter_type filter_type;
   enum ls_listing_type listing_type;  
+  struct ignore_pattern* ignored_patterns;
 };
 
 
@@ -42,6 +48,13 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) ;
 struct fileinfo* create_fileinfo(const char* dir,struct dirent* entry) ;
 void print_fileinfo(int heading,struct fileinfo* fi);
 void file_mode_string(mode_t md,char* str);
+
+void add_ignored_patterns(char* pat, struct ls_config* ls_config ){
+  struct ignore_pattern* node = malloc(sizeof(struct ignore_pattern));
+  node->pattern  = pat;
+  node->next = ls_config->ignored_patterns;
+  ls_config->ignored_patterns = node;
+}
 
 int main(int argc,char * argv[]){
 
@@ -58,12 +71,16 @@ int main(int argc,char * argv[]){
   config.sort_by = sort_by_filename;
   config.listing_type = listing_type_simple;
   config.filter_type = filter_type_normal;
+  config.filter_backups = 0;
+  config.ignored_patterns = NULL;
 
-  const char* short_options = "aArSshvltU";
+  const char* short_options = "aABrSshvltUI:";
 
   const struct option long_options[] = {
     {"all",0,NULL,'a'},
     {"almost-all",0,NULL,'A'},
+    {"ignore",1,NULL,'I'},
+    {"ignore-backups",0,NULL,'B'},
     {"help",0,NULL,'h'},
     {NULL,0,NULL,'U'},
     {"status",0,NULL,'s'},
@@ -82,6 +99,12 @@ int main(int argc,char * argv[]){
     switch(next_opt){
     case 'h':
       print_usage_cmd(stdout,0);      
+      break;
+    case 'I':
+      add_ignored_patterns(optarg,&config);
+      break;
+    case 'B':
+      config.filter_backups = 1;
       break;
     case 'a':
       config.filter_type = filter_type_none;
@@ -128,16 +151,16 @@ int main(int argc,char * argv[]){
     }
   } while (next_opt != -1);  
 
+
   char* dir;
   if(optind >= argc) {
     dir = get_current_dir_name();
-  } else{
-    dir = strdup(argv[optind]);
-  }
-  
-  list_directory_cmd(dir,&config);
+  } else {
+    dir = strdup(argv[optind]);    
+  } 
+    list_directory_cmd(dir,&config);
 
-  free(dir);  
+    free(dir);  
 
   return 0;
 }
@@ -184,9 +207,10 @@ int fi_cmp_type(const void * i1, const void* i2){
 int list_directory_cmd(const char* pwd, struct ls_config* config) {
 
   DIR* dir = opendir(pwd);
-
+  char err_no_dir[2048];
+  snprintf(err_no_dir,2048,"opendir:No such directory [%s]",pwd);
   if(NULL == dir){
-    perror("opendir");
+    perror(err_no_dir);
     return 1;
   }
 
@@ -217,6 +241,22 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
         }
       }
     }
+
+    if(config->filter_backups){
+      if(entry->d_name[strlen(entry->d_name)-1] == '~'){
+        continue;
+      }
+    }
+
+    if(config->ignored_patterns !=NULL){
+      struct ignore_pattern* i = NULL;
+      for(i = config->ignored_patterns;i!=NULL; i=i->next){
+        if(fnmatch(i->pattern,entry->d_name,FNM_PATHNAME) == 0){
+          goto outer_loop;
+        }
+      }
+    }
+
 
     files[num_entries++] = create_fileinfo(pwd,entry);
 
