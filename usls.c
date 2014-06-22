@@ -63,7 +63,7 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) ;
 struct fileinfo* create_fileinfo(char* dir_path,struct dirent* entry)  ;
 void clear_fileinfo(struct fileinfo* fi);
 
-void print_fileinfo(struct ls_config* config ,struct fileinfo* fi );
+void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi );
 
 
 void file_mode_string(mode_t md,char* str);
@@ -107,7 +107,7 @@ int main(int argc,char * argv[]){
   struct ls_config config;
   ls_config_init(&config);
 
-  const char* short_options = "iaABrSshvltUI:";
+  const char* short_options = "iaABrSshvltURI:";
 
   const struct option long_options[] = {
     {"all",0,NULL,'a'},
@@ -166,11 +166,6 @@ int main(int argc,char * argv[]){
       config.sort_by = sort_by_size;
       break;
     case 's':
-      if(optind > argc){
-        print_usage_cmd(stderr,1);
-      }
-      const char* file_name = argv[optind];
-      file_status_cmd(file_name);
       break;
     case 'v':
       verbose = 1 ;
@@ -229,7 +224,17 @@ int fi_cmp_type(const void * i1, const void* i2){
   struct fileinfo** fi2 = (struct fileinfo**)i2;
   return (*fi1)->type > (*fi2)->type;
 }
+/***
+1. Start queue current directory
+2. if push current directorys to queu
+3. dequeue first diretory 
+4. list the first directory
+5. push all directories in first directory onto queue
+5. dequeue the first directory in queue
+or perhaps it is eqsier just to call list directory recuriviely
 
+
+ ***/
 int list_directory_cmd(const char* pwd, struct ls_config* config) {
 
   DIR* dir = opendir(pwd);
@@ -240,7 +245,6 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
     return 1;
   }
 
-
   int num_entries = 0;
   int alloc_entries = 1;
 
@@ -248,7 +252,6 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
   struct dirent * entry;  
   char* ignored_files [] ={".",".."};
   int nignored = 2;
-
 
   while (NULL!= (entry = readdir(dir))) {    
 
@@ -330,11 +333,23 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
   }
 
   printf("total %d\n",num_entries);
+  fflush(stdout);
   int i;
   for( i =0 ; i < num_entries; i++){
-    if(files[i]!=NULL){ // filtered files end up as null
-      print_fileinfo(config,files[i]);
+    if(files[i]!=NULL){ // filtered files end up as null      
+      print_long_fileinfo(config,files[i]);
+      int is_dir = S_ISDIR(files[i]->stat->st_mode);
+      char* path = strdup(files[i]->path);
       clear_fileinfo(files[i]);
+
+      if(is_dir && config->recurse){
+        printf("%s:\n",path);
+        list_directory_cmd(path,config);
+      }
+      free(path);
+
+
+
     }
   }
 
@@ -385,7 +400,7 @@ void file_mode_string(mode_t md,char* str) {
   if(md & S_IXOTH) str[8] ='x';    
 }
 
-void print_fileinfo(struct ls_config* config ,struct fileinfo* fi ){
+void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi ){
   // For now
   if(config->display_inode_number!=0)
     printf("%7ld ",fi->stat->st_ino);
@@ -452,49 +467,6 @@ void clear_fileinfo(struct fileinfo* fi){
   }
 }
 
-int file_status_cmd(const char* file_name ) {  
-  struct stat sb ;
-  int err = stat(file_name,&sb);
-  if(err){
-    perror("stat");
-    return 1;    
-  }
-
-  const char* desc = 
-    "File Name: %s \n"
-    "Device Id: %ld\n"
-    "Inode Number: %ld\n"
-    "Mode: %ld\n"
-    "HardLinks: %ld\n"
-    "User Id: %ld\n"
-    "Group Id : %ld\n"
-    "Device Id : %ld\n" 
-    "Size : %ld bytes\n"
-    "Block Size : %ld bytes\n"
-    "Blocks Allocated : %ld \n"
-    "Last Access Time : %ld \n"
-    "Last Modified Time : %ld \n"
-    "Last Status Time : %ld \n\n" ;
-    
-  printf(desc,
-         file_name,
-         sb.st_dev,
-         sb.st_ino,
-         sb.st_mode,
-         sb.st_nlink,
-         sb.st_uid,
-         sb.st_gid,
-         sb.st_dev,
-         sb.st_size,
-         sb.st_blksize,
-         sb.st_blocks,
-         sb.st_atime,
-         sb.st_mtime,
-         sb.st_ctime);
-  return 0;
-}
-
-
 enum filetype determine_filetype(unsigned char  d_type){
   enum filetype ft;
   switch(d_type){
@@ -530,7 +502,6 @@ void print_usage_cmd(FILE* stream, int exit_code){
   fprintf(stream,"Usage: %s  <options> [input file] \n",program_name);
   fprintf(stream,
           "-h    --help    Display this usage information\n"
-          "-s    --stat    Display detailed file status information\n"
           "-l    --long    Display long list of information\n"
           "-v    --verbose Print verbose output \n");
   exit(exit_code);
