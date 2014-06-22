@@ -40,20 +40,43 @@ struct ls_config {
   struct ignore_pattern* ignored_patterns;
 };
 
+enum filetype { unknown,fifo,chardev,directory,blockdev,
+                normal,symbolic_link,sock,whiteout,arg_directory };
+
+struct fileinfo 
+{
+  char* name;
+  char* path;
+  enum filetype type;
+  struct stat* stat;
+};
+
 
 void print_usage_cmd(FILE* stream, int exit_code);
 int file_status_cmd(const char* file_name );
 int list_directory_cmd(const char* pwd, struct ls_config* config) ;
 
-struct fileinfo* create_fileinfo(const char* dir,struct dirent* entry) ;
-void print_fileinfo(int heading,struct fileinfo* fi);
-void file_mode_string(mode_t md,char* str);
+struct fileinfo* create_fileinfo(char* dir_path,struct dirent* entry)  ;
+void clear_fileinfo(struct fileinfo* fi);
+void print_fileinfo(int heading,struct fileinfo* fi );
 
+void file_mode_string(mode_t md,char* str);
+enum filetype determine_filetype(unsigned char  d_type);
 void add_ignored_patterns(char* pat, struct ls_config* ls_config ){
   struct ignore_pattern* node = malloc(sizeof(struct ignore_pattern));
   node->pattern  = pat;
   node->next = ls_config->ignored_patterns;
   ls_config->ignored_patterns = node;
+}
+
+void clear_ignored_patterns(struct ignore_pattern* ps){
+  struct ignore_pattern* t=NULL;
+  struct ignore_pattern* i = ps;
+  while(i!=NULL){
+    t=i->next;
+    free(i);
+    i=t;
+  }
 }
 
 int main(int argc,char * argv[]){
@@ -64,7 +87,6 @@ int main(int argc,char * argv[]){
   int next_opt = 0;
 
   struct ls_config config;
-
   // defaults 
   config.recurse =0;
   config.sort_reverse = 0;
@@ -158,50 +180,39 @@ int main(int argc,char * argv[]){
   } else {
     dir = strdup(argv[optind]);    
   } 
-    list_directory_cmd(dir,&config);
+  list_directory_cmd(dir,&config);
 
-    free(dir);  
+  free(dir);  
 
   return 0;
 }
 
-enum filetype { unknown,fifo,chardev,directory,blockdev,
-              normal,symbolic_link,sock,whiteout,arg_directory 
-};
 
-struct fileinfo 
-{
-  char* name;
-  char* path;
-  enum filetype type;
 
-  struct stat* stat;
-
-};
 
 // Macros
 int fi_cmp_mtime(const void * i1, const void* i2){
-   struct fileinfo** fi1 = (struct fileinfo**)i1;
-   struct fileinfo** fi2 = (struct fileinfo**)i2;
-   return (*fi1)->stat->st_mtime < (*fi2)->stat->st_mtime;
+  struct fileinfo** fi1 = (struct fileinfo**)i1;
+  struct fileinfo** fi2 = (struct fileinfo**)i2;
+  return (*fi1)->stat->st_mtime < (*fi2)->stat->st_mtime;
 }
 
 int fi_cmp_name(const void * i1, const void* i2){
-   struct fileinfo** fi1 = (struct fileinfo**)i1;
-   struct fileinfo** fi2 = (struct fileinfo**)i2;
-   return strcmp((*fi1)->name,(*fi2)->name);
+  struct fileinfo** fi1 = (struct fileinfo**)i1;
+  struct fileinfo** fi2 = (struct fileinfo**)i2;
+  return strcmp((*fi1)->name,(*fi2)->name);
 }
 
 int fi_cmp_size(const void * i1, const void* i2){
-   struct fileinfo** fi1 = (struct fileinfo**)i1;
-   struct fileinfo** fi2 = (struct fileinfo**)i2;
-   return (*fi1)->stat->st_size > (*fi2)->stat->st_size;
+  struct fileinfo** fi1 = (struct fileinfo**)i1;
+  struct fileinfo** fi2 = (struct fileinfo**)i2;
+  return (*fi1)->stat->st_size > (*fi2)->stat->st_size;
 }
 
 int fi_cmp_type(const void * i1, const void* i2){
-   struct fileinfo** fi1 = (struct fileinfo**)i1;
-   struct fileinfo** fi2 = (struct fileinfo**)i2;
-   return (*fi1)->type > (*fi2)->type;
+  struct fileinfo** fi1 = (struct fileinfo**)i1;
+  struct fileinfo** fi2 = (struct fileinfo**)i2;
+  return (*fi1)->type > (*fi2)->type;
 }
 
 int list_directory_cmd(const char* pwd, struct ls_config* config) {
@@ -214,17 +225,18 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
     return 1;
   }
 
+
   int num_entries = 0;
-  int alloc_entries = 100;
+  int alloc_entries = 1;
 
   struct fileinfo** files = malloc(alloc_entries*sizeof(struct fileinfo *));
-
   struct dirent * entry;  
   char* ignored_files [] ={".",".."};
-  char* ignored_regex [] ={"\."};  //starts with '.'
   int nignored = 2;
 
+
   while (NULL!= (entry = readdir(dir))) {    
+
     
     if(config->filter_type != filter_type_none) {
       int i = 0 ;
@@ -257,16 +269,28 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
       }
     }
 
+    if(num_entries >= alloc_entries){
+      alloc_entries = alloc_entries*2;
+      //TODO: fix heap corruption   
+      struct fileinfo** p = realloc(files, alloc_entries* sizeof(struct fileinfo*));
+      if(!p){
+        printf("Error in realloc \n");
+        return 1;
+      } 
+      files = p;
+    }    
 
-    files[num_entries++] = create_fileinfo(pwd,entry);
 
-    if(num_entries>alloc_entries){
-      files = realloc(files,alloc_entries);
-      alloc_entries*=2;
-    }
+    int fi = create_fileinfo(pwd,entry);
+    if(!fi){
+      printf("error creating fileinfo\n");
+      return 1;
+    }    
+    files[num_entries++] = fi;
+
   outer_loop:;
   }
-  
+
   //Sorting
   switch(config->sort_by) {
   case sort_by_nosort: break;
@@ -295,40 +319,41 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
   for( i =0 ; i < num_entries; i++){
     if(files[i]!=NULL){ // filtered files end up as null
       print_fileinfo(i==0,files[i]);
-      free(files[i]);
+      clear_fileinfo(files[i]);
     }
   }
 
+  free(files);
   closedir(dir);
   return 0;
 }
 
 void filetype_sdesc(char** s,enum filetype type) {
   const char* desc;
-    switch(type){
-    case blockdev:
-      desc = "Block";
-      break;
-    case chardev:
-      desc = "Char";
-      break;
-    case normal:
-      desc = "-";
-      break;
-    case directory:
-      desc = "d";
-      break;
-    case fifo:
-      desc = "FIFO ";
-      break;
-    case sock:
-      desc = "SOCK";
-      break;
-   default:
-     desc = "-";
-     break;    
-    }
-    *s = strdup(desc);
+  switch(type){
+  case blockdev:
+    desc = "Block";
+    break;
+  case chardev:
+    desc = "Char";
+    break;
+  case normal:
+    desc = "-";
+    break;
+  case directory:
+    desc = "d";
+    break;
+  case fifo:
+    desc = "FIFO ";
+    break;
+  case sock:
+    desc = "SOCK";
+    break;
+  default:
+    desc = "-";
+    break;    
+  }
+  *s = strdup(desc);
 }
 void file_mode_string(mode_t md,char* str) {
   strcpy(str,"---------");
@@ -345,56 +370,119 @@ void file_mode_string(mode_t md,char* str) {
   if(md & S_IXOTH) str[8] ='x';    
 }
 
-void print_fileinfo(int heading,struct fileinfo* fi){
-    /* if(heading){
-     *   printf("%6s\t%10s\t%10s%10s\t\n","Type","Inode#","Size","Name");
-     * } */
-    char* desc;
-    filetype_sdesc(&desc,fi->type);
-    printf("%1s",desc);
-    free(desc);
-    char mode_str[10];
-    file_mode_string(fi->stat->st_mode,mode_str);
-    printf("%9s ",mode_str);
+void print_fileinfo(int heading,struct fileinfo* fi ){
+  /* if(heading){
+   *   printf("%6s\t%10s\t%10s%10s\t\n","Type","Inode#","Size","Name");
+   * } */
+  char* desc;
+  filetype_sdesc(&desc,fi->type);
+  printf("%1s",desc);
+  free(desc);
+  char mode_str[10];
+  file_mode_string(fi->stat->st_mode,mode_str);
+  printf("%9s ",mode_str);
 
-    struct passwd* pw = getpwuid(fi->stat->st_uid);
-    printf("%9s ",pw->pw_name);
+  struct passwd* pw = getpwuid(fi->stat->st_uid);
+  printf("%9s ",pw->pw_name);
 
-    struct group* group_info =  getgrgid(fi->stat->st_gid);    
-    printf("%9s ",group_info->gr_name);
+  struct group* group_info =  getgrgid(fi->stat->st_gid);    
+  printf("%9s ",group_info->gr_name);
 
-    // For now
-    //  printf("%10ld\t",fi->inode_num);
+  // For now
+  //  printf("%10ld\t",fi->inode_num);
 
-    printf("%8ld ",fi->stat->st_size);
+  printf("%8ld ",fi->stat->st_size);
 
-    char mod_time[100];
-    strftime(mod_time,100,"%b %d %H:%M",localtime(&(fi->stat->st_mtime)));
-    printf("%9s ",mod_time);
-    printf("%s",fi->name);
+  char mod_time[100];
+  strftime(mod_time,100,"%b %d %H:%M",localtime(&(fi->stat->st_mtime)));
+  printf("%9s ",mod_time);
+  printf("%s",fi->name);
 
 
-    printf("\n");  
+  printf("\n");  
 }
 
-struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry) {
+
+struct fileinfo* create_fileinfo(char* dir_path,struct dirent* entry)  {
   struct fileinfo* fi = malloc(sizeof(struct fileinfo));
-  fi->name = strdup(entry->d_name);
-  asprintf(&fi->path,"%s/%s",dir_path,entry->d_name);
+  fi->name =  strdup(entry->d_name);
+  int path_err = asprintf(&fi->path,"%s/%s",dir_path,entry->d_name);
 
-  struct stat* file_stat = malloc(sizeof(struct stat));
+  if(!path_err){
+    printf("error allocating path\n");
+    clear_fileinfo(fi);
+    return NULL;
+  }
 
+  struct stat* file_stat = malloc(sizeof(struct stat));  
   int ret = stat(fi->path,file_stat);
   if(ret){
+    clear_fileinfo(fi);
+    free(file_stat);
     perror("stat");
-    return NULL;    
-  }
-  
+    return -1;
+  }  
+
   fi->stat = file_stat;
+  fi->type = determine_filetype(entry->d_type);
+  return fi;
+}
 
+void clear_fileinfo(struct fileinfo* fi){
+  if(fi){
+    if(fi->name) free(fi->name);
+    if(fi->path) free(fi->path);
+    if(fi->stat) free(fi->stat);
+    free(fi);
+  }
+}
+
+int file_status_cmd(const char* file_name ) {  
+  struct stat sb ;
+  int err = stat(file_name,&sb);
+  if(err){
+    perror("stat");
+    return 1;    
+  }
+
+  const char* desc = 
+    "File Name: %s \n"
+    "Device Id: %ld\n"
+    "Inode Number: %ld\n"
+    "Mode: %ld\n"
+    "HardLinks: %ld\n"
+    "User Id: %ld\n"
+    "Group Id : %ld\n"
+    "Device Id : %ld\n" 
+    "Size : %ld bytes\n"
+    "Block Size : %ld bytes\n"
+    "Blocks Allocated : %ld \n"
+    "Last Access Time : %ld \n"
+    "Last Modified Time : %ld \n"
+    "Last Status Time : %ld \n\n" ;
+    
+  printf(desc,
+         file_name,
+         sb.st_dev,
+         sb.st_ino,
+         sb.st_mode,
+         sb.st_nlink,
+         sb.st_uid,
+         sb.st_gid,
+         sb.st_dev,
+         sb.st_size,
+         sb.st_blksize,
+         sb.st_blocks,
+         sb.st_atime,
+         sb.st_mtime,
+         sb.st_ctime);
+  return 0;
+}
+
+
+enum filetype determine_filetype(unsigned char  d_type){
   enum filetype ft;
-
-  switch(entry->d_type){
+  switch(d_type){
   case DT_BLK:
     ft = blockdev;
     break;
@@ -417,52 +505,7 @@ struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry) {
     ft = unknown;
     break;    
   }
-  fi->type = ft;
-
-  return fi;
-}
-
-int file_status_cmd(const char* file_name ){
-  
-  struct stat sb ;
-  int err = stat(file_name,&sb);
-  if(err){
-    perror("stat");
-    return 1;    
-  }
-
-  const char* desc = 
-     "File Name: %s \n"
-     "Device Id: %ld\n"
-     "Inode Number: %ld\n"
-     "Mode: %ld\n"
-     "HardLinks: %ld\n"
-     "User Id: %ld\n"
-     "Group Id : %ld\n"
-     "Device Id : %ld\n" 
-     "Size : %ld bytes\n"
-     "Block Size : %ld bytes\n"
-     "Blocks Allocated : %ld \n"
-     "Last Access Time : %ld \n"
-     "Last Modified Time : %ld \n"
-     "Last Status Time : %ld \n\n" ;
-    
-  printf(desc,
-         file_name,
-         sb.st_dev,
-         sb.st_ino,
-         sb.st_mode,
-         sb.st_nlink,
-         sb.st_uid,
-         sb.st_gid,
-         sb.st_dev,
-         sb.st_size,
-         sb.st_blksize,
-         sb.st_blocks,
-         sb.st_atime,
-         sb.st_mtime,
-         sb.st_ctime);
-  return 0;
+  return ft;
 }
 
 
