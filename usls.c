@@ -31,11 +31,15 @@ struct ignore_pattern{
 };
 
 struct ls_config {
-  int sort_reverse ;
   int recurse;
+
   int filter_backups;
-  enum ls_sort_by sort_by;
   enum ls_filter_type filter_type;
+  int display_inode_number;
+
+  int sort_reverse ;
+  enum ls_sort_by sort_by;
+
   enum ls_listing_type listing_type;  
   struct ignore_pattern* ignored_patterns;
 };
@@ -58,7 +62,9 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) ;
 
 struct fileinfo* create_fileinfo(char* dir_path,struct dirent* entry)  ;
 void clear_fileinfo(struct fileinfo* fi);
-void print_fileinfo(int heading,struct fileinfo* fi );
+
+void print_fileinfo(struct ls_config* config ,struct fileinfo* fi );
+
 
 void file_mode_string(mode_t md,char* str);
 enum filetype determine_filetype(unsigned char  d_type);
@@ -79,6 +85,18 @@ void clear_ignored_patterns(struct ignore_pattern* ps){
   }
 }
 
+void ls_config_init(struct ls_config * config){
+    // defaults 
+  config->recurse =0;
+  config->display_inode_number =0;
+  config->sort_reverse = 0;
+  config->sort_by = sort_by_filename;
+  config->listing_type = listing_type_simple;
+  config->filter_type = filter_type_normal;
+  config->filter_backups = 0;
+  config->ignored_patterns = NULL;
+}
+
 int main(int argc,char * argv[]){
 
   program_name = argv[0];
@@ -87,21 +105,15 @@ int main(int argc,char * argv[]){
   int next_opt = 0;
 
   struct ls_config config;
-  // defaults 
-  config.recurse =0;
-  config.sort_reverse = 0;
-  config.sort_by = sort_by_filename;
-  config.listing_type = listing_type_simple;
-  config.filter_type = filter_type_normal;
-  config.filter_backups = 0;
-  config.ignored_patterns = NULL;
+  ls_config_init(&config);
 
-  const char* short_options = "aABrSshvltUI:";
+  const char* short_options = "iaABrSshvltUI:";
 
   const struct option long_options[] = {
     {"all",0,NULL,'a'},
     {"almost-all",0,NULL,'A'},
     {"ignore",1,NULL,'I'},
+    {NULL,0,NULL,'i'},
     {"ignore-backups",0,NULL,'B'},
     {"help",0,NULL,'h'},
     {NULL,0,NULL,'U'},
@@ -121,6 +133,9 @@ int main(int argc,char * argv[]){
     switch(next_opt){
     case 'h':
       print_usage_cmd(stdout,0);      
+      break;
+    case 'i':
+      config.display_inode_number =1;
       break;
     case 'I':
       add_ignored_patterns(optarg,&config);
@@ -318,7 +333,7 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
   int i;
   for( i =0 ; i < num_entries; i++){
     if(files[i]!=NULL){ // filtered files end up as null
-      print_fileinfo(i==0,files[i]);
+      print_fileinfo(config,files[i]);
       clear_fileinfo(files[i]);
     }
   }
@@ -370,10 +385,11 @@ void file_mode_string(mode_t md,char* str) {
   if(md & S_IXOTH) str[8] ='x';    
 }
 
-void print_fileinfo(int heading,struct fileinfo* fi ){
-  /* if(heading){
-   *   printf("%6s\t%10s\t%10s%10s\t\n","Type","Inode#","Size","Name");
-   * } */
+void print_fileinfo(struct ls_config* config ,struct fileinfo* fi ){
+  // For now
+  if(config->display_inode_number!=0)
+    printf("%7ld ",fi->stat->st_ino);
+
   char* desc;
   filetype_sdesc(&desc,fi->type);
   printf("%1s",desc);
@@ -388,8 +404,7 @@ void print_fileinfo(int heading,struct fileinfo* fi ){
   struct group* group_info =  getgrgid(fi->stat->st_gid);    
   printf("%9s ",group_info->gr_name);
 
-  // For now
-  //  printf("%10ld\t",fi->inode_num);
+
 
   printf("%8ld ",fi->stat->st_size);
 
