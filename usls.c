@@ -23,9 +23,14 @@ enum ls_sort_by{ sort_by_nosort,sort_by_filename , sort_by_size, sort_by_mtime }
 
 enum ls_listing_type{ listing_type_simple, listing_type_long };
 
+enum ls_filter_type {filter_type_none,filter_type_almost_none,filter_type_normal};
+
 struct ls_config {
-  enum ls_sort_by sort_by;
   int sort_reverse ;
+  int recurse;
+
+  enum ls_sort_by sort_by;
+  enum ls_filter_type filter_type;
   enum ls_listing_type listing_type;  
 };
 
@@ -47,18 +52,24 @@ int main(int argc,char * argv[]){
 
   struct ls_config config;
 
+  // defaults 
+  config.recurse =0;
   config.sort_reverse = 0;
   config.sort_by = sort_by_filename;
   config.listing_type = listing_type_simple;
+  config.filter_type = filter_type_normal;
 
-  const char* short_options = "rSshvltU";
+  const char* short_options = "aArSshvltU";
 
   const struct option long_options[] = {
+    {"all",0,NULL,'a'},
+    {"almost-all",0,NULL,'A'},
     {"help",0,NULL,'h'},
     {NULL,0,NULL,'U'},
     {"status",0,NULL,'s'},
     {"sort-size",0,NULL,'S'},
     {"reverse",0,NULL,'r'},
+    {"recurse",0,NULL,'R'},
     {NULL,0,NULL,'t'},
     {"long",0,NULL,'l'},
     {"verbose",1,NULL,'v'}
@@ -72,8 +83,18 @@ int main(int argc,char * argv[]){
     case 'h':
       print_usage_cmd(stdout,0);      
       break;
+    case 'a':
+      config.filter_type = filter_type_none;
+      break;
+    case 'A':
+      //filter all files but trivial .,..
+      config.filter_type = filter_type_almost_none;
+      break;
     case 'r':
       config.sort_reverse = 1;
+      break;
+    case 'R':
+      config.recurse = 1;
       break;
     case 'U':
       config.sort_by = sort_by_nosort;
@@ -106,7 +127,6 @@ int main(int argc,char * argv[]){
       abort();
     }
   } while (next_opt != -1);  
-
 
   char* dir;
   if(optind >= argc) {
@@ -162,6 +182,7 @@ int fi_cmp_type(const void * i1, const void* i2){
 }
 
 int list_directory_cmd(const char* pwd, struct ls_config* config) {
+
   DIR* dir = opendir(pwd);
 
   if(NULL == dir){
@@ -175,14 +196,35 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
   struct fileinfo** files = malloc(alloc_entries*sizeof(struct fileinfo *));
 
   struct dirent * entry;  
+  char* ignored_files [] ={".",".."};
+  char* ignored_regex [] ={"\."};  //starts with '.'
+  int nignored = 2;
 
   while (NULL!= (entry = readdir(dir))) {    
+    
+    if(config->filter_type != filter_type_none) {
+      int i = 0 ;
+      for(i=0;i< nignored; i++){
+        if(strcmp(entry->d_name,ignored_files[i]) == 0) {
+          goto outer_loop;
+        }
+      }
+
+      //Filter files all files starting with .
+      if(config->filter_type != filter_type_almost_none ) {
+        if(entry->d_name[0] == '.'){
+          continue;
+        }
+      }
+    }
+
     files[num_entries++] = create_fileinfo(pwd,entry);
 
     if(num_entries>alloc_entries){
       files = realloc(files,alloc_entries);
       alloc_entries*=2;
     }
+  outer_loop:;
   }
   
   //Sorting
