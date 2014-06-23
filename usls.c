@@ -466,7 +466,6 @@ void print_simple_fileinfo(struct print_config* pc,
 }
 
 void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi ){
-  // For now
   if(config->display_inode_number!=0)
     printf("%7ld ",fi->stat->st_ino);
 
@@ -492,7 +491,6 @@ void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi ){
   strftime(mod_time,100,"%b %d %H:%M",localtime(&(fi->stat->st_mtime)));
   printf("%9s ",mod_time);
   printf("%s",fi->name);
-
 
   printf("\n");  
 }
