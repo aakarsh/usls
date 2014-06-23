@@ -55,7 +55,12 @@ struct fileinfo
   struct stat* stat;
 };
 
-
+struct print_config {
+  int max_filename_len;
+  int line_len;
+  int num_files;
+};
+void print_simple_fileinfo(struct print_config* pc, struct ls_config* config ,struct fileinfo** fi );
 void print_usage_cmd(FILE* stream, int exit_code);
 int file_status_cmd(const char* file_name );
 int list_directory_cmd(const char* pwd, struct ls_config* config) ;
@@ -224,17 +229,9 @@ int fi_cmp_type(const void * i1, const void* i2){
   struct fileinfo** fi2 = (struct fileinfo**)i2;
   return (*fi1)->type > (*fi2)->type;
 }
-/***
-1. Start queue current directory
-2. if push current directorys to queu
-3. dequeue first diretory 
-4. list the first directory
-5. push all directories in first directory onto queue
-5. dequeue the first directory in queue
-or perhaps it is eqsier just to call list directory recuriviely
 
 
- ***/
+
 int list_directory_cmd(const char* pwd, struct ls_config* config) {
 
   DIR* dir = opendir(pwd);
@@ -332,27 +329,53 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
     }
   }
 
-  printf("total %d\n",num_entries);
-  fflush(stdout);
+
+
+  
+  struct print_config pc;
+  pc.max_filename_len = 0;
+
   int i;
-  for( i =0 ; i < num_entries; i++){
-    if(files[i]!=NULL){ // filtered files end up as null      
-      print_long_fileinfo(config,files[i]);
-      int is_dir = S_ISDIR(files[i]->stat->st_mode);
-      char* path = strdup(files[i]->path);
-      clear_fileinfo(files[i]);
-
-      if(is_dir && config->recurse){
-        printf("%s:\n",path);
-        list_directory_cmd(path,config);
-      }
-      free(path);
-
-
-
-    }
+  for(i =0;i<num_entries; i++){
+    int len = strlen(files[i]->name);
+    if(len > pc.max_filename_len)
+      pc.max_filename_len = len;
   }
+  
+  pc.line_len = 120;
+  pc.num_files = num_entries;
 
+  
+  switch(config->listing_type){
+  case listing_type_long:    
+    
+    printf("total %d\n",num_entries);
+    fflush(stdout);
+
+    for( i =0 ; i < num_entries; i++){
+      if(files[i]!=NULL){ // filtered files end up as null      
+        print_long_fileinfo(config,files[i]);
+        int is_dir = S_ISDIR(files[i]->stat->st_mode);
+        char* path = strdup(files[i]->path);
+        //            clear_fileinfo(files[i]);
+
+        if(is_dir && config->recurse){
+          printf("%s:\n",path);
+          list_directory_cmd(path,config);
+        }
+        free(path);
+      }
+    }
+    break;
+  case listing_type_simple:        
+    print_simple_fileinfo(&pc,config,files);
+
+    break;
+  }
+  for(i=0 ; i< num_entries; i++) {
+    if(files[i]!=NULL)
+      clear_fileinfo(files[i]);        
+  }
   free(files);
   closedir(dir);
   return 0;
@@ -398,6 +421,47 @@ void file_mode_string(mode_t md,char* str) {
   if(md & S_IROTH) str[6] ='r';
   if(md & S_IWOTH) str[7] ='w';
   if(md & S_IXOTH) str[8] ='x';    
+}
+
+void print_simple_fileinfo(struct print_config* pc, 
+                           struct ls_config* config,
+                           struct fileinfo** files) {
+
+  int max_column_width =(pc->max_filename_len);
+  int num_cols = pc->line_len/max_column_width;
+  if(num_cols <= 0){
+    num_cols = 1;
+  }
+  
+  int col_widths[num_cols];
+  int i;
+
+  for(i=0;i< num_cols;i+=1) 
+    col_widths[i]=0;
+
+  for(i=0;i< pc->num_files;i+=1) {
+    int l = strlen(files[i]->name);
+    if(col_widths[i%num_cols] < l) {
+      col_widths[i%num_cols] = l;
+    }
+  }
+
+  int current_line_width = 0;
+
+  for(i=0;i<pc->num_files;i++){
+      if(files[i]==NULL)
+        continue;
+      struct fileinfo* fi = files[i];
+      if(config->display_inode_number!=0)
+        printf("%7ld ",fi->stat->st_ino);
+      char fmt[15];
+      snprintf(fmt,15,"%%-%ds  ",col_widths[i%num_cols]);
+      printf(fmt,fi->name);
+      if((i+1)%num_cols==0 && i!=0){
+        printf("\n");  
+      }
+  }
+  printf("\n");
 }
 
 void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi ){
