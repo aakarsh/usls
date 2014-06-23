@@ -342,7 +342,7 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
       pc.max_filename_len = len;
   }
   
-  pc.line_len = 120;
+  pc.line_len = 100;
   pc.num_files = num_entries;
 
   
@@ -461,7 +461,8 @@ void print_simple_fileinfo(struct print_config* pc,
         printf("\n");  
       }
   }
-  printf("\n");
+  if(i%num_cols!=0)
+    printf("\n");
 }
 
 void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi ){
