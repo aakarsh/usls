@@ -44,7 +44,7 @@ void config_init(struct config * config){
   config->show_word_counts = 0;
 }
 int wc_cmd(FILE* stream, struct config * config,struct wc_result* res);
-
+void print_usage_cmd(FILE* stream, int exit_code);
 
 int main(int argc,char * argv[]){
 
@@ -159,6 +159,7 @@ int wc_cmd(FILE* stream, struct config * config,struct wc_result* res){
     }
   }  
   printf("%6d %6d %6d ", res->line_count,res->word_count,res->byte_count);
+  return 0;  
 }
 
 

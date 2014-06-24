@@ -33,6 +33,7 @@ void config_init(struct config * config){
   config->squeeze_blanks = 0;
 }
 int cat_cmd(FILE* stream, struct config * config);
+void print_usage_cmd(FILE* stream, int exit_code);
 
 int main(int argc,char * argv[]){
 
@@ -161,6 +162,7 @@ int cat_cmd(FILE* stream, struct config * config){
     
     loop_end : ;
   }      
+  return 0;
 }
 
 

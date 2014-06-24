@@ -65,7 +65,7 @@ void print_usage_cmd(FILE* stream, int exit_code);
 int file_status_cmd(const char* file_name );
 int list_directory_cmd(const char* pwd, struct ls_config* config) ;
 
-struct fileinfo* create_fileinfo(char* dir_path,struct dirent* entry)  ;
+struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry)  ;
 void clear_fileinfo(struct fileinfo* fi);
 
 void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi );
@@ -105,8 +105,6 @@ void ls_config_init(struct ls_config * config){
 int main(int argc,char * argv[]){
 
   program_name = argv[0];
-
-  int verbose = 0;  
   int next_opt = 0;
 
   struct ls_config config;
@@ -172,9 +170,6 @@ int main(int argc,char * argv[]){
       break;
     case 's':
       break;
-    case 'v':
-      verbose = 1 ;
-      break;
     case 'l':
       config.listing_type = listing_type_long;
       break;
@@ -188,17 +183,18 @@ int main(int argc,char * argv[]){
     }
   } while (next_opt != -1);  
 
-
-  char* dir;
+  
+  char dir[PATH_MAX];
   if(optind >= argc) {
-    dir = get_current_dir_name();
+    char* done = (char*) getcwd(dir,PATH_MAX);
+    if(!done){
+      perror("getcwd");
+      exit(1);
+    }
   } else {
-    dir = strdup(argv[optind]);    
+    strncpy(dir,argv[optind],PATH_MAX);
   } 
   list_directory_cmd(dir,&config);
-
-  free(dir);  
-
   return 0;
 }
 
@@ -296,9 +292,9 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
     }    
 
 
-    int fi = create_fileinfo(pwd,entry);
+    struct fileinfo* fi = create_fileinfo(pwd,entry);    
     if(!fi){
-      printf("error creating fileinfo\n");
+      printf("error creating fileinfo for %s/%s \n",pwd,entry->d_name);
       return 1;
     }    
     files[num_entries++] = fi;
@@ -446,8 +442,6 @@ void print_simple_fileinfo(struct print_config* pc,
     }
   }
 
-  int current_line_width = 0;
-
   for(i=0;i<pc->num_files;i++){
       if(files[i]==NULL)
         continue;
@@ -496,24 +490,27 @@ void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi ){
 }
 
 
-struct fileinfo* create_fileinfo(char* dir_path,struct dirent* entry)  {
+struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry)  {
   struct fileinfo* fi = malloc(sizeof(struct fileinfo));
   fi->name =  strdup(entry->d_name);
-  int path_err = asprintf(&fi->path,"%s/%s",dir_path,entry->d_name);
 
-  if(!path_err){
+  int path_len =strlen(dir_path)+strlen(entry->d_name)+2; //sep+\0
+  fi->path = (char*) malloc(path_len);
+  if(!fi->path){
     printf("error allocating path\n");
     clear_fileinfo(fi);
     return NULL;
   }
+  sprintf(fi->path,"%s/%s",dir_path,entry->d_name);
+
 
   struct stat* file_stat = malloc(sizeof(struct stat));  
-  int ret = stat(fi->path,file_stat);
-  if(ret){
+  int err = stat(fi->path,file_stat);
+  if(err){
     clear_fileinfo(fi);
-    free(file_stat);
+    free(file_stat);    
     perror("stat");
-    return -1;
+    return NULL;
   }  
 
   fi->stat = file_stat;
