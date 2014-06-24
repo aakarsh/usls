@@ -8,3 +8,4 @@ uls
 *.out
 ucat
 uwc
+bin/*
