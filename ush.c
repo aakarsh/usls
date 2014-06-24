@@ -14,8 +14,10 @@
 #include <fnmatch.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
-#define _GNU_SOURCE         
+
 
 const char* program_name;
 
@@ -26,10 +28,21 @@ struct config {
 void config_init(struct config * config){
 }
 
+struct cmd_cache{
+  char* cmd;
+  char* path;
+  struct cmd_cache* next;
+};
+void add_cmd_cache(char* cmd, char* path);
+struct cmd_cache* find_cmd_cache(char* cmd);
+void build_cmd_cache();
+
 void print_usage_cmd(FILE* stream, int exit_code);
 void prompt(FILE* s);
 char* find_cmd(char* s);
+
 static char* create_path(char* dir,char* fname);
+
 int main(int argc,char * argv[]){
 
   program_name = argv[0];
@@ -71,54 +84,71 @@ int main(int argc,char * argv[]){
   prompt(s);
   size_t max_cmd_len = 4096;
   char line[max_cmd_len];  
-  int exit =0;
+
+  build_cmd_cache();
 
   while(NULL != fgets(line,max_cmd_len,stdin)){
-    int len = strlen(line);
-    char* cmd = malloc(len);    
-    strncpy(cmd,line,len-1);    
-
+    size_t len = strlen(line);
+    line[len-1]= '\0';
+    char* cmd = line;
     if(strcmp(cmd,"exit") == 0){
-      exit =1;
+      break;      
     }    
 
-    //    fprintf(stdout,"%s\n",cmd);    
-    char* cmd_path = find_cmd(cmd);
-    if(!cmd_path){
-      printf("%s : Not found\n",cmd);
-      goto prompt;
-    }
-    printf("Found: [%s] %s!\n",cmd_path,cmd);
-    free(cmd_path);    
-
-    if(exit)    
-      break;
-
-  prompt:
+    printf("[%s]\n",cmd);
+    pid_t cid = fork();
+    int child_status;
+    if(cid != 0) {
+      wait(&child_status);
+      if(WIFEXITED(child_status)){
+      }else{
+        perror(cmd);
+      }
+    } else{ // child execute cmd;
+      int err = execlp(cmd,"ush",NULL);
+      if(err){
+        perror("execlp");
+        exit(1);
+      }
+    }  
     prompt(s);
-    free(cmd);
   } 
   return 0;
 }
 
-char* find_cmd(char* cmd){
+
+static struct cmd_cache* cmd_list = NULL;
+
+void add_cmd_cache(char* cmd, char* path){
+  struct cmd_cache* c = malloc(sizeof (struct cmd_cache));
+  c->cmd = strdup(cmd);
+  c->path = strdup(path);
+  c->next = cmd_list;  
+  cmd_list = c;  
+}
+
+struct cmd_cache* find_cmd_cache(char* cmd){
+  struct cmd_cache* c = NULL;
+  for(c = cmd_list; c!=NULL; c=c->next) {
+    if(strcmp(c->cmd,cmd) == 0){
+      return c;
+    }
+  }
+  return c;
+}
+
+void build_cmd_cache(){
   char* path_dirs = strdup(getenv("PATH"));
   char* path =  strtok(path_dirs,":");
-  int found = 0;
-  char* cmd_path = NULL;
 
-  while(NULL != path && !found) {
-    //    printf("%s\n",path);    
+  while(NULL != path ) {
     DIR* d = opendir(path);    
     if(!d){
-      fprintf(stderr,"Cannot open %s",path);
-      perror("opendir");
-      exit(1);
+      goto parse_next;
     }
-
     struct dirent* f ;
 
-    while(NULL!=(f=readdir(d)) && !found) {
+    while(NULL!=(f=readdir(d)) ) {
       if(DT_REG!= f->d_type){
         continue;
       }
@@ -129,11 +159,56 @@ char* find_cmd(char* cmd){
       if(stat(full_path,st)){
         fprintf(stderr,"%s",path);
         perror("stat");
+        if(full_path)
+          free(full_path);
+        continue;
+      }
+
+      if(S_IXUSR & st->st_mode) { 
+        add_cmd_cache(f->d_name,full_path);
+      }        
+      free(st);
+      if(full_path)
+        free(full_path);      
+    }
+    closedir(d);
+
+  parse_next:
+    path = strtok(NULL,":");
+  }
+  free(path_dirs);
+}
+
+char* find_cmd(char* cmd){
+  char* path_dirs = strdup(getenv("PATH"));
+  char* path =  strtok(path_dirs,":");
+  int found = 0;
+  char* cmd_path = NULL;
+
+  while(NULL != path && !found) {
+    DIR* d = opendir(path);    
+    if(!d){
+      fprintf(stderr,"Cannot open %s\n",path);
+      perror("opendir");
+      return NULL;
+    }
+
+    struct dirent* f ;
+
+    while(NULL!=(f=readdir(d)) && !found) {
+      if(DT_REG!= f->d_type){
+        continue;
+      }
+      char* full_path = create_path(path,f->d_name);      
+      struct stat* st = malloc(sizeof (struct stat));
+
+      if(stat(full_path,st)){
+        fprintf(stderr,"%s",path);
+        perror("stat");
         exit(1);
       }
 
       if(S_IXUSR & st->st_mode) { //user exec
-        //        printf("%s\n",full_path);
         if(strcmp(cmd,f->d_name) == 0){
           found = 1;
           cmd_path = full_path;
