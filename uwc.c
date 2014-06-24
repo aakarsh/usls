@@ -36,6 +36,7 @@ void clear_result(struct wc_result* res){
   res->byte_count = 0;
   res->word_count = 0;
 }
+
 void config_init(struct config * config){
   config->show_byte_counts = 0;
   config->show_char_counts = 0;
@@ -43,6 +44,7 @@ void config_init(struct config * config){
   config->show_max_line = 0;
   config->show_word_counts = 0;
 }
+
 int wc_cmd(FILE* stream, struct config * config,struct wc_result* res);
 void print_usage_cmd(FILE* stream, int exit_code);
 
