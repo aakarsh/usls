@@ -67,7 +67,6 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) ;
 
 struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry)  ;
 void clear_fileinfo(struct fileinfo* fi);
-
 void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi );
 
 
