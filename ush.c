@@ -21,7 +21,7 @@
 
 const char* program_name;
 
-enum token_type {tok_semi,tok_aphanum,tok_pipe, tok_and ,tok_or,tok_unknown};
+enum token_type {tok_semi,tok_ident,tok_pipe, tok_and ,tok_or,tok_unknown};
 
 struct cmd_token{ 
   char* value;
@@ -56,8 +56,8 @@ char* find_cmd(char* s);
 
 static char* create_path(char* dir,char* fname);
 
-int main(int argc,char * argv[]){
-
+int main(int argc,char * argv[])
+{
   program_name = argv[0];
 
   int next_opt = 0;
@@ -131,24 +131,35 @@ int main(int argc,char * argv[]){
   } 
   return 0;
 }
-struct cmd_token* create_token(){
+
+struct cmd_token* create_token()
+{
   struct cmd_token* cur = malloc(sizeof(struct cmd_token));  
   cur->start = 0;
   cur->end = 0;
   cur->value =NULL;
   cur->type = tok_unknown;
+  cur->prev=NULL;
+  cur->next =NULL;
   return cur;
 }
 
-int push_token(struct cmd_token** tokens, char* value, int start, int end)
-{ 
-  if(!tokens)
-    return -1;
-
+struct cmd_token* create_token2(char* value,enum token_type ty,int start,int end)
+{
   struct cmd_token* cur = create_token();
   cur->value = value;
   cur->start = start;
   cur->end = end;
+  cur->type = ty;
+  return cur;
+}
+
+int push_token(struct cmd_token** tokens, enum token_type ty,char* value, int start, int end)
+{ 
+  if(!tokens)
+    return -1;
+
+  struct cmd_token* cur = create_token2(value,ty,start,end);
 
   if(tokens) {
     cur->next = *tokens;
@@ -157,79 +168,108 @@ int push_token(struct cmd_token** tokens, char* value, int start, int end)
     }
     *tokens = cur;
   }
-
   return 0;
 }
 
+void print_token(struct cmd_token* token)
+{
+  printf("[%s (%d-%d)] \n",token->value,token->start,token->end);
+}
+
+int tokens_reverse(struct cmd_token** tokens )
+{
+  if(tokens == NULL || *tokens == NULL){
+    return -1;
+  }
+  printf("tokens_reverse\n");
+  struct cmd_token* head = *tokens;
+  struct cmd_token* l = *tokens;
+  while(l!=NULL) {
+    struct cmd_token* saved_next = l->next;
+    struct cmd_token* saved_prev = l->prev;
+    l->prev = l->next;
+    l->next = saved_prev;
+    if(saved_next == NULL){
+      head = l;
+    } 
+    l = saved_next;
+  }
+  *tokens  = head;
+  printf("ordered {\n");  
+  l=*tokens;
+  while(l){
+    print_token(l);
+    l=l->next;
+  }
+  printf("}\n");  
+  return 0;
+}
+
+char* substring(char* line, int start, int end)
+{
+  int n = end - start;      
+  if(n < 0){
+    return NULL;
+  }
+  char* str = malloc(n+1);  
+  strncpy(str,line+start,n);
+  str[n]='\0';
+  return str;
+}
 
 struct cmd_token* tokenize(char* line){
   int i;
   enum state{word,blank} st;
   struct cmd_token* tokens = NULL;
-  struct cmd_token* cur = create_token();
-  int got_token =0;
+
   st = blank;
-  //  int tok_start =0;
-  //  int tok_end = 0;
+  int tok_end = 0, tok_start = 0;
+  char* token_value;
   for(i =0; i< strlen(line); i++){
     printf("[%c]\n",line[i]);
 
-    if((isblank(line[i])|| strchr(";",line[i])) && st == word){
+    char* delim = ";|";
+
+    if((isblank(line[i]) || strchr(delim,line[i]))) {
+
+      if(st == word) {
+        tok_end = i;
+        token_value = substring(line,tok_start,tok_end);
+        push_token(&tokens,tok_ident,token_value,tok_start, tok_end);
+      }
+      switch(line[i]) {
+      case ';':
+        push_token(&tokens,tok_semi,";",i,i);
+        break;
+      case '|':
+        push_token(&tokens,tok_pipe,"|",i,i);
+      default:;
+      }
       st = blank;
-      cur->end = i;
-      int len = cur->end - cur->start;      
-      cur->value = malloc(len+1);
-      strncpy(cur->value,&line[cur->start],len);
-      cur->value[len]='\0';
-      got_token =1;
-    } else if((isalnum(line[i]) || strchr("-$_",line[i])) && st == blank){
-      st = word;
-      cur->start = i;
-    } else  if (isblank(line[i])) {
-      st = blank;
-    }
-    if(got_token){
-      printf("got_token:[%s]\n",cur->value);     
-      cur->next = tokens;
-      if(tokens)
-        tokens->prev = cur;
-      tokens = cur;
-      cur = create_token();
-      got_token = 0;
+    } else if((isalnum(line[i]) || strchr("-$_",line[i]))){
+      if(st != word) {
+        st = word;
+        tok_start = i;
+      }
     }
   }
-  if(st== word){ // in the middle of parsing a w
-    st = blank;
-    cur->end = i;
-    int len = cur->end - cur->start;      
-    cur->value = malloc(len+1);
-    strncpy(cur->value,&line[cur->start],len);
-    cur->value[len]='\0';
-    printf("got_token:[%s %d-%d]\n",cur->value,cur->start,cur->end);
-    cur->next = tokens;
-    if(tokens)
-      tokens->prev = cur;
-    tokens = cur;
+
+  if(st == word ) { // in the middle of parsing a word
+    tok_end = i;
+    token_value = substring(line,tok_start,tok_end);
+    push_token(&tokens,tok_ident,token_value,tok_start,tok_end);
   }
 
   struct cmd_token* l = NULL;
   for(l = tokens; l!= NULL; l = l->next) {
-    printf("token[%s:%d]\n",l->value,l->type);
+    printf("pre-reverse-token[%s:%d]\n",l->value,l->type);
   }
-  //reverse
-  /*
-  l = tokens;
-  while(l!=NULL) {
-    printf("reverse \n");
-    struct cmd_token* tmp = l->next;
-    l->next =l->prev;
-    l->prev= tmp;
-    l = tmp;
-  }
-  */
 
+  tokens_reverse(&tokens);
+
+  l = NULL;
   for(l = tokens; l!= NULL; l = l->next) {
-    printf("token[%s:%d",l->value,l->type);
+    printf("post-rev-token[%s:%d]\n",l->value,l->type);
   }
 
   return tokens;
