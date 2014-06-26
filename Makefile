@@ -10,10 +10,10 @@ ush: ush.c ush-lex
 	gcc -g -Wall -o bin/ush ush.c
 	cp bin/* ~/bin
 
-ush-lex: ush_lex.l
+ush-lex: ush_lex.l ush_parser.y
+	bison --defines=ush_tokens.h ush_parser.y
 	flex -o ush_lex.yy.c ush_lex.l 
-	gcc -g -Wall ush_lex.yy.c -lfl
-#valgrind --leak-check=yes  uls ~  | tee v.outx
+	gcc -g -Wall  -I. -o bin/par ush_parser.tab.c ush_lex.yy.c    -lfl  -ly
 
 clean:
 	$(RM) bin/*
