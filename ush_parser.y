@@ -3,7 +3,8 @@
 #include <stdio.h>
 
 extern FILE *yyin;
-
+void yyerror(char *s);
+int yylex();
 %}
 
 %union {
@@ -23,12 +24,12 @@ statement: IDENTIFIER '=' expression  {printf ("[parser]=%.2f\n",$3);}
     |      expression                 {printf ("[parser]=%.2f\n",$1);}
     ;
 
-expression: expression '+' NUMBER { $$ = $1 + $3; printf("[parser]%d\n",$$);  }
-    |       expression '-' NUMBER { $$ = $1 - $3; printf("[parser]%d\n",$$);  }
+expression: expression '+' NUMBER { $$ = $1 + $3; printf("[parser]%.2f\n",$$);  }
+    |       expression '-' NUMBER { $$ = $1 - $3; printf("[parser]%.2f\n",$$);  }
     |       NUMBER                {  printf("[parser]:%.2f\n",$1); $$ = $1;       }
     ;
 %%
-main()
+int main(int argc, char* argv[])
 {
   while(!feof(stdin)) {
     yyparse();
@@ -36,8 +37,8 @@ main()
   return 0;
 }
 
-yyerror(s)
-char *s;
+void yyerror(char *s)
+//char *s;
 {
     fprintf(stderr, "%s\n", s);
 }
