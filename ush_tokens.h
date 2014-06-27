@@ -57,7 +57,7 @@ extern int yydebug;
 typedef union YYSTYPE
 {
 /* Line 2053 of yacc.c  */
-#line 6 "ush_parser.y"
+#line 9 "ush_parser.y"
 
   char* str;
   double dbl;

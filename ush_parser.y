@@ -1,6 +1,9 @@
 %{
 #include <ctype.h>
 #include <stdio.h>
+
+extern FILE *yyin;
+
 %}
 
 %union {
@@ -13,14 +16,28 @@
 %token <str>   IDENTIFIER 
 %type  <dbl>   expression
 %%
-start:     statement
-statement: IDENTIFIER '=' expression  {printf ("[parser]=%f\n",$3);}
-    |      expression                 {printf ("[parser]=%f\n",$1);}
+
+statement-list:     statement ';'
+    |               statement-list statement 
+statement: IDENTIFIER '=' expression  {printf ("[parser]=%.2f\n",$3);}
+    |      expression                 {printf ("[parser]=%.2f\n",$1);}
     ;
 
-expression: expression '+' NUMBER {printf("1jlj"); $$ = $1 + $3; }
-    |       expression '-' NUMBER { printf("kalj");$$ = $1 - $3; }
-    |       NUMBER  { printf("parser:Number:%f",$1);
-                      $$ = $1;}
+expression: expression '+' NUMBER { $$ = $1 + $3; printf("[parser]%d\n",$$);  }
+    |       expression '-' NUMBER { $$ = $1 - $3; printf("[parser]%d\n",$$);  }
+    |       NUMBER                {  printf("[parser]:%.2f\n",$1); $$ = $1;       }
     ;
+%%
+main()
+{
+  while(!feof(stdin)) {
+    yyparse();
+  }
+  return 0;
+}
 
+yyerror(s)
+char *s;
+{
+    fprintf(stderr, "%s\n", s);
+}
