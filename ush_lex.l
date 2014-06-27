@@ -4,7 +4,7 @@
 #include "ush_tokens.h"
 }
 MATH_SYMBOL  [+*-/]
-IDENTIFIER  [a-zA-Z_$-][a-zA-Z0-9_$-]*
+IDENTIFIER  [a-zA-Z_$][a-zA-Z0-9_$]*
 PIPE     \|
 SEMI     \;
 BACKGROUND      &

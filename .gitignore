@@ -11,3 +11,4 @@ uwc
 bin/*
 *.yy.c
 *.tab.c
+obj/*

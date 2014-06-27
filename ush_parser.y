@@ -20,15 +20,17 @@ int yylex();
 
 statement-list:     statement ';'
     |               statement-list statement 
+    |               statement
+
 statement: IDENTIFIER '=' expression  {printf ("[parser]=%.2f\n",$3);}
     |      expression                 {printf ("[parser]=%.2f\n",$1);}
     ;
-
 expression: expression '+' NUMBER { $$ = $1 + $3; printf("[parser]%.2f\n",$$);  }
     |       expression '-' NUMBER { $$ = $1 - $3; printf("[parser]%.2f\n",$$);  }
-    |       NUMBER                {  printf("[parser]:%.2f\n",$1); $$ = $1;       }
+    |       NUMBER                { printf("[parser]:%.2f\n",$1); $$ = $1;     }
     ;
 %%
+
 int main(int argc, char* argv[])
 {
   while(!feof(stdin)) {

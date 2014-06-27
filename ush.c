@@ -392,6 +392,10 @@ char* create_path(char* dir,char* fname){
 }
 
 
+
+
+
+
 void prompt(FILE* s){
   fprintf(s,"ush> ");
 }
