@@ -17,6 +17,16 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include "ush_parser.tab.c"
+
+void yyerror(char *s)
+{
+    fprintf(stderr, "%s\n", s);
+}
+/*
+  populated by the yacc parser.
+ */
+extern struct command* parsed_command_list;
 
 
 const char* program_name;
@@ -56,8 +66,21 @@ char* find_cmd(char* s);
 
 static char* create_path(char* dir,char* fname);
 
+
+void clear_commands(struct command** pcl){
+  struct command *i = NULL,*next;
+  for(i  = *pcl; i ; i = next) {
+    free(i->value->value);
+    free(i->value);
+    next = i->next;
+    free(i);
+  }
+  *pcl = NULL;
+}
+
 int main(int argc,char * argv[])
 {
+
   program_name = argv[0];
 
   int next_opt = 0;
@@ -100,6 +123,47 @@ int main(int argc,char * argv[])
 
   build_cmd_cache();
 
+  prompt(s);
+  while(!feof(stdin)) {
+
+
+    int retval = yyparse();
+    if(retval!= 0) {
+      printf("syntax error!\n");
+      continue;
+    }
+    printf("retval : %d\n",retval);
+
+    struct command* i  = parsed_command_list;
+    int cnt = 0 ;
+    for(;i!=NULL; i = i->next) {      
+      printf("%d. got-cmd: %s \n",cnt++,i->value->value);
+      char* cmd = i->value-> value;
+      pid_t cid = fork();
+      int child_status; 
+      if(cid!= 0) {  //parent 
+        wait(&child_status);
+        if(WIFEXITED(child_status)){
+          goto exit;
+        } else{
+          perror(cmd);
+        }
+      } else { //child
+        int err = execlp(cmd,"ush",NULL);
+        if(err){
+          perror("execlp");
+          exit(1);
+        }
+      }      
+    }  
+  exit:
+    clear_commands(&parsed_command_list);
+
+   prompt(s);    
+  }
+  clear_commands(&parsed_command_list);
+
+  /**
   while(NULL != fgets(line,max_cmd_len,stdin)){
     size_t len = strlen(line);
     line[len-1]= '\0';
@@ -129,6 +193,7 @@ int main(int argc,char * argv[])
   prompt:
     prompt(s);
   } 
+  */
   return 0;
 }
 

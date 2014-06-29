@@ -293,8 +293,10 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
 
     struct fileinfo* fi = create_fileinfo(pwd,entry);    
     if(!fi){
-      printf("error creating fileinfo for %s/%s \n",pwd,entry->d_name);
-      return 1;
+      printf("error getting fileinfo for %s/%s \n",pwd,entry->d_name);
+      num_entries++;
+      goto outer_loop;
+      //      return 1;
     }    
     files[num_entries++] = fi;
 
@@ -380,10 +382,10 @@ void filetype_sdesc(char** s,enum filetype type) {
   const char* desc;
   switch(type){
   case blockdev:
-    desc = "Block";
+    desc = "b";
     break;
   case chardev:
-    desc = "Char";
+    desc = "c";
     break;
   case normal:
     desc = "-";
@@ -392,10 +394,10 @@ void filetype_sdesc(char** s,enum filetype type) {
     desc = "d";
     break;
   case fifo:
-    desc = "FIFO ";
+    desc = "f";
     break;
   case sock:
-    desc = "SOCK";
+    desc = "s";
     break;
   default:
     desc = "-";
@@ -492,16 +494,14 @@ void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi ){
 struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry)  {
   struct fileinfo* fi = malloc(sizeof(struct fileinfo));
   fi->name =  strdup(entry->d_name);
-
-  int path_len =strlen(dir_path)+strlen(entry->d_name)+2; //sep+\0
-  fi->path = (char*) malloc(path_len);
-  if(!fi->path){
-    printf("error allocating path\n");
+  char p[PATH_MAX];
+  sprintf(p,"%s/%s",dir_path,entry->d_name);
+  fi->path = malloc(PATH_MAX);
+  if(!realpath(p,fi->path)){
     clear_fileinfo(fi);
+    perror("realpath");
     return NULL;
   }
-  sprintf(fi->path,"%s/%s",dir_path,entry->d_name);
-
 
   struct stat* file_stat = malloc(sizeof(struct stat));  
   int err = stat(fi->path,file_stat);
