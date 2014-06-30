@@ -30,7 +30,7 @@ extern struct command* parsed_command_list;
 
 
 const char* program_name;
-
+/*
 enum token_type {tok_semi,tok_ident,tok_pipe, tok_and ,tok_or,tok_unknown};
 
 struct cmd_token{ 
@@ -43,7 +43,7 @@ struct cmd_token{
 };
 
 struct cmd_token* tokenize(char* line);
-
+*/
 struct config {
 
 };
@@ -51,6 +51,7 @@ struct config {
 void config_init(struct config * config){
 }
 
+/*
 struct cmd_cache{
   char* cmd;
   char* path;
@@ -59,12 +60,12 @@ struct cmd_cache{
 void add_cmd_cache(char* cmd, char* path);
 struct cmd_cache* find_cmd_cache(char* cmd);
 void build_cmd_cache();
-
+*/
 void print_usage_cmd(FILE* stream, int exit_code);
 void prompt(FILE* s);
 char* find_cmd(char* s);
 
-static char* create_path(char* dir,char* fname);
+//static char* create_path(char* dir,char* fname);
 
 
 void clear_commands(struct command** pcl){
@@ -117,7 +118,7 @@ int main(int argc,char * argv[])
   } while (next_opt != -1);  
     
   FILE* s = stdout;
-  build_cmd_cache();
+  //  build_cmd_cache();
 
   prompt(s);
   while(!feof(stdin)) {
@@ -128,12 +129,16 @@ int main(int argc,char * argv[])
       printf("syntax error!\n");
       goto exit;
     }
-    printf("retval : %d\n",retval);
 
     struct command* i  = parsed_command_list;
     for(;i!=NULL; i = i->next) {      
 
       char* cmd = i->value->value->value;
+
+      if(strcmp(cmd,"exit") == 0){
+        printf("Goodbye!\n");
+        exit(1);
+      }
       int arg_cnt =  0 ; 
       struct word_list* p = i->value;
       for(; p ; p = p->next) arg_cnt++;
@@ -144,9 +149,9 @@ int main(int argc,char * argv[])
       for(;p ;p = p-> next) {
         cmd_args[c++] = p->value->value; 
       }
+
       cmd_args[arg_cnt] = NULL;
 
-        //i->value->value;
       pid_t cid = fork();
 
       int child_status; 
@@ -159,7 +164,7 @@ int main(int argc,char * argv[])
           perror(cmd);
         }
       } else { //child
-        int err = execvp(cmd,cmd_args);//"ush",NULL);
+        int err = execvp(cmd,cmd_args);
         if(err){
           perror("execlp");
           exit(1);
@@ -171,41 +176,9 @@ int main(int argc,char * argv[])
    prompt(s);    
   }
   clear_commands(&parsed_command_list);
-
-  /**
-  while(NULL != fgets(line,max_cmd_len,stdin)){
-    size_t len = strlen(line);
-    line[len-1]= '\0';
-    char* cmd = line;
-    tokenize(cmd);
-    if(strcmp(cmd,"exit") == 0){
-      break;      
-    }    
-
-    printf("[%s]\n",cmd);
-    pid_t cid = fork();
-    int child_status;
-    if(cid != 0) {
-      wait(&child_status);
-      if(WIFEXITED(child_status)){
-        goto prompt;
-      }else{
-        perror(cmd);
-      }
-    } else{ // child execute cmd;
-      int err = execlp(cmd,"ush",NULL);
-      if(err){
-        perror("execlp");
-        exit(1);
-      }
-    }  
-  prompt:
-    prompt(s);
-  } 
-  */
   return 0;
 }
-
+/*
 struct cmd_token* create_token()
 {
   struct cmd_token* cur = malloc(sizeof(struct cmd_token));  
@@ -349,6 +322,7 @@ struct cmd_token* tokenize(char* line){
   return tokens;
 }
 
+
 static struct cmd_cache* cmd_list = NULL;
 
 void add_cmd_cache(char* cmd, char* path){
@@ -469,7 +443,7 @@ char* create_path(char* dir,char* fname){
 
 
 
-
+*/
 void prompt(FILE* s){
   fprintf(s,"ush> ");
 }
