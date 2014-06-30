@@ -27,7 +27,6 @@ void yyerror(char *s)
 //  Populated by the yacc parser.
 extern struct command* parsed_command_list;
 
-
 const char* program_name;
 
 struct config {
@@ -37,13 +36,9 @@ struct config {
 void config_init(struct config * config){
 }
 
-
 void print_usage_cmd(FILE* stream, int exit_code);
 void prompt(FILE* s);
 char* find_cmd(char* s);
-
-
-
 
 void clear_commands(struct command** pcl){
   struct command *i = NULL,*next;
@@ -95,15 +90,13 @@ int main(int argc,char * argv[])
   } while (next_opt != -1);  
     
   FILE* s = stdout;
-  //  build_cmd_cache();
-
   prompt(s);
   while(!feof(stdin)) {
 
 
     int retval = yyparse();
     if(retval!= 0) {      
-      printf("syntax error!\n");
+      fprintf(s,"syntax error!\n");
       goto exit;
     }
 
@@ -113,7 +106,7 @@ int main(int argc,char * argv[])
       char* cmd = i->value->value->value;
 
       if(strcmp(cmd,"exit") == 0){
-        printf("Goodbye!\n");
+        fprintf(s,"Goodbye!\n");
         exit(1);
       }
       int arg_cnt =  0 ; 
