@@ -12,3 +12,4 @@ bin/*
 *.yy.c
 *.tab.c
 obj/*
+get/*

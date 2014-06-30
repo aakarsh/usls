@@ -117,10 +117,6 @@ int main(int argc,char * argv[])
   } while (next_opt != -1);  
     
   FILE* s = stdout;
-  prompt(s);
-  size_t max_cmd_len = 4096;
-  char line[max_cmd_len];  
-
   build_cmd_cache();
 
   prompt(s);
@@ -128,19 +124,33 @@ int main(int argc,char * argv[])
 
 
     int retval = yyparse();
-    if(retval!= 0) {
+    if(retval!= 0) {      
       printf("syntax error!\n");
-      continue;
+      goto exit;
     }
     printf("retval : %d\n",retval);
 
     struct command* i  = parsed_command_list;
-    int cnt = 0 ;
     for(;i!=NULL; i = i->next) {      
-      printf("%d. got-cmd: %s \n",cnt++,i->value->value);
-      char* cmd = i->value-> value;
+
+      char* cmd = i->value->value->value;
+      int arg_cnt =  0 ; 
+      struct word_list* p = i->value;
+      for(; p ; p = p->next) arg_cnt++;
+
+      char* cmd_args[arg_cnt+1];
+      int c = 0;
+      p = i->value;
+      for(;p ;p = p-> next) {
+        cmd_args[c++] = p->value->value; 
+      }
+      cmd_args[arg_cnt] = NULL;
+
+        //i->value->value;
       pid_t cid = fork();
+
       int child_status; 
+
       if(cid!= 0) {  //parent 
         wait(&child_status);
         if(WIFEXITED(child_status)){
@@ -149,7 +159,7 @@ int main(int argc,char * argv[])
           perror(cmd);
         }
       } else { //child
-        int err = execlp(cmd,"ush",NULL);
+        int err = execvp(cmd,cmd_args);//"ush",NULL);
         if(err){
           perror("execlp");
           exit(1);
@@ -158,7 +168,6 @@ int main(int argc,char * argv[])
     }  
   exit:
     clear_commands(&parsed_command_list);
-
    prompt(s);    
   }
   clear_commands(&parsed_command_list);

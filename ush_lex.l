@@ -5,7 +5,7 @@
 }
 
 
-WORD_PATTERN  [a-zA-Z_$][a-zA-Z0-9_$]*
+WORD_PATTERN  [a-zA-Z_$-.*/][a-zA-Z0-9_$.*/]*
 DIGIT_PATTERN  [0-9]+
 MINUS_PATTERN   -
 COMMENT #.*
