@@ -107,8 +107,9 @@ int main(int argc,char * argv[])
 
       if(strcmp(cmd,"exit") == 0){
         fprintf(s,"Goodbye!\n");
-        exit(1);
+        exit(EXIT_SUCCESS);
       }
+
       int arg_cnt =  0 ; 
       struct word_list* p = i->value;
       for(; p ; p = p->next) arg_cnt++;
@@ -121,6 +122,26 @@ int main(int argc,char * argv[])
       }
 
       cmd_args[arg_cnt] = NULL;
+
+      if (strcmp(cmd,"cd") == 0 ) {
+
+        char * dest_dir = NULL;
+        if(arg_cnt<=1){
+          dest_dir = getenv("HOME");
+          if(!dest_dir) {
+            fprintf(stderr,"Couldnt determine home directory\n");
+            goto exit;
+          }
+        }else {
+          dest_dir = cmd_args[1];
+        }          
+        int ret = chdir(dest_dir);
+        if(ret){
+          perror("chdir");
+        }
+        goto exit;
+
+      }
 
       pid_t cid = fork();
 
@@ -137,7 +158,7 @@ int main(int argc,char * argv[])
         int err = execvp(cmd,cmd_args);
         if(err){
           perror("execlp");
-          exit(1);
+          exit(EXIT_FAILURE);
         }
       }      
     }  
