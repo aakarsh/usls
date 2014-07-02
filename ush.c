@@ -136,13 +136,27 @@ int main(int argc,char * argv[])
           dest_dir = cmd_args[1];
         }          
         int ret = chdir(dest_dir);
-        if(ret){
+        if(ret) {
           perror("chdir");
         }
         goto exit;
 
       }
-
+      FILE* r_stream = NULL;
+      if(i->redirect){
+        fprintf(stderr,"entry\n");
+        char* r_file = i->redirect->redirector.filename->value;
+        fprintf(stderr,"redirect file %s\n",r_file);
+        switch(i->redirect->instruction){
+        case r_input_direction:
+          fprintf(stderr,"redirect read\n");
+          r_stream = fopen(r_file,"r");
+          break;
+        case r_output_direction:
+          fprintf(stderr,"redirect write\n");
+          r_stream = fopen(r_file,"w");
+        }
+      }
       pid_t cid = fork();
 
       int child_status; 
@@ -150,11 +164,25 @@ int main(int argc,char * argv[])
       if(cid!= 0) {  //parent 
         wait(&child_status);
         if(WIFEXITED(child_status)){
+          if(i->redirect)
+            fclose(r_stream);
           goto exit;
         } else{
           perror(cmd);
         }
       } else { //child
+        if(i->redirect){
+          switch(i->redirect->instruction){
+          case r_input_direction:    
+            fprintf(stderr,"dup input stream \n");
+            dup2(fileno(r_stream),0);
+            break;
+          case r_output_direction:
+            fprintf(stderr,"dup output stream \n");
+            dup2(fileno(r_stream),1);
+            break;
+          }
+        }
         int err = execvp(cmd,cmd_args);
         if(err){
           perror("execlp");
