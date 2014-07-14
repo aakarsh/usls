@@ -68,8 +68,8 @@ enum ls_filter_type
 
 struct ignore_pattern
 {
-char* pattern;
-struct ignore_pattern* next;
+  char* pattern;
+  struct ignore_pattern* next;
 };
 
 struct ls_config 
@@ -171,8 +171,6 @@ int main(int argc,char * argv[]){
 
   program_name = argv[0];
 
-  
-
   int next_opt = 0;
 
   struct ls_config config;
@@ -202,8 +200,7 @@ int main(int argc,char * argv[]){
                            short_options,long_options, NULL);
     extern int optind;
     switch(next_opt){
-    case 'h':
-      //      print_usage_cmd(stdout,0);      
+    case 'h':    
       config.human_readable_size = 1;
       break;
     case 'i':
@@ -219,7 +216,6 @@ int main(int argc,char * argv[]){
       config.filter_type = filter_type_none;
       break;
     case 'A':
-      //filter all files but trivial .,..
       config.filter_type = filter_type_almost_none;
       break;
     case 'r':
@@ -251,7 +247,6 @@ int main(int argc,char * argv[]){
       abort();
     }
   } while (next_opt != -1);  
-
   
   char dir[PATH_MAX];
   if(optind >= argc) {
@@ -294,8 +289,6 @@ int fi_cmp_type(const void * i1, const void* i2){
   struct fileinfo** fi2 = (struct fileinfo**)i2;
   return (*fi1)->type > (*fi2)->type;
 }
-
-
 
 int list_directory_cmd(const char* pwd, struct ls_config* config) {
 
@@ -365,7 +358,6 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
       printf("error getting fileinfo for %s/%s \n",pwd,entry->d_name);
       num_entries++;
       goto outer_loop;
-      //      return 1;
     }    
     files[num_entries++] = fi;
 
@@ -591,12 +583,7 @@ void print_formatted_filename(struct fileinfo* fi)
 
   if(S_ISLNK(fi->stat->st_mode)) {
     start_color(DIM, BLUE, DEFAULT);
-    //    struct stat l_stat;
-    //    bool err = lstat(fi->path,&l_stat);
-    //    if(!err){
-      printf("%s -> %s",fi->name,fi->path);
-      //      l_stat
-      //    }
+    printf("%s -> %s",fi->name,fi->path);
     reset_color();
     return;
   }
