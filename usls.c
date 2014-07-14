@@ -18,6 +18,30 @@
 #define bool int
 #endif
 
+// Type
+#define RESET       0
+#define BRIGHT      1
+#define DIM         2 
+#define UNDERLINE   3
+#define BLINK       4
+#define REVERSE     7
+#define HIDDEN      8
+
+// Colors
+#define RESETCOLOR "\033[0m"
+#define BLACK       0
+#define RED         1
+#define GREEN       2
+#define YELLOW      3
+#define BLUE        4
+#define MAGENTA     5
+#define CYAN        6
+#define WHITE       7
+#define DEFAULT      49
+
+void start_color(int attr, int fg, int bg);
+void reset_color();
+
 const char* program_name;
 
 enum ls_sort_by
@@ -88,17 +112,27 @@ struct print_config
   int num_files;
 };
 
-struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry);
+struct fileinfo* create_fileinfo(const char* dir_path,
+                                 struct dirent* entry);
+
 void clear_fileinfo(struct fileinfo* fi);
 
-void print_simple_fileinfo(struct print_config* pc, struct ls_config* config ,struct fileinfo** fi );
-void print_usage_cmd(FILE* stream, int exit_code);
-int file_status_cmd(const char* file_name );
-int list_directory_cmd(const char* pwd, struct ls_config* config) ;
-void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi );
-void file_mode_string(mode_t md,char* str);
-enum filetype determine_filetype(unsigned char  d_type);
+void print_simple_fileinfo(struct print_config* pc, 
+                           struct ls_config* config,
+                           struct fileinfo** fi);
 
+void print_long_fileinfo(struct ls_config* config,
+                         struct fileinfo* fi );
+
+void print_usage_cmd(FILE* stream, int exit_code);
+
+int file_status_cmd(const char* file_name);
+int list_directory_cmd(const char* pwd, 
+                       struct ls_config* config);
+
+
+void file_mode_string(mode_t md, char* str);
+enum filetype determine_filetype(unsigned char  d_type);
 
 void add_ignored_patterns(char* pat, struct ls_config* ls_config ){
   struct ignore_pattern* node = malloc(sizeof(struct ignore_pattern));
@@ -132,6 +166,9 @@ void ls_config_init(struct ls_config * config){
 int main(int argc,char * argv[]){
 
   program_name = argv[0];
+
+  
+
   int next_opt = 0;
 
   struct ls_config config;
@@ -275,7 +312,6 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
 
   while (NULL!= (entry = readdir(dir))) {    
 
-    
     if(config->filter_type != filter_type_none) {
       int i = 0 ;
       for(i=0;i< nignored; i++){
@@ -485,7 +521,10 @@ void print_simple_fileinfo(struct print_config* pc,
     printf("\n");
 }
 
-void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi ){
+void print_formatted_filename(struct fileinfo* fi);
+
+void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi )
+{
   if(config->display_inode_number!=0)
     printf("%7ld ",fi->stat->st_ino);
 
@@ -508,8 +547,42 @@ void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi ){
   char mod_time[100];
   strftime(mod_time,100,"%b %d %H:%M",localtime(&(fi->stat->st_mtime)));
   printf("%9s ",mod_time);
-  printf("%s",fi->name);
+
+  //print file name
+  //  printf("%s",fi->name);
+  print_formatted_filename(fi);
   printf("\n");  
+}
+
+void print_formatted_filename(struct fileinfo* fi)
+{  
+  switch(fi->type) {
+  case directory:
+    start_color(BRIGHT, BLUE, DEFAULT);
+    break;  
+  case normal:
+  default:
+    reset_color();
+  }
+  if(fi->type == normal){
+    if(fi->stat->st_mode & S_IXUSR) 
+      start_color(BRIGHT, GREEN, DEFAULT);    
+  }
+
+  if(S_ISLNK(fi->stat->st_mode)) {
+    start_color(DIM, BLUE, DEFAULT);
+    struct stat l_stat;
+    bool err = lstat(fi->path,&l_stat);
+    if(!err){
+      printf("%s -> %s",fi->name,fi->path);
+      //      l_stat
+    }
+    reset_color();
+    return;
+  }
+  // hmm..
+  printf("%s",fi->name);
+  reset_color();
 }
 
 
@@ -519,20 +592,24 @@ struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry)  {
   char p[PATH_MAX];
   sprintf(p,"%s/%s",dir_path,entry->d_name);
   fi->path = malloc(PATH_MAX);
-  if(!realpath(p,fi->path)){
+  if(!realpath(p,fi->path)) {
     clear_fileinfo(fi);
     perror("realpath");
     return NULL;
   }
 
   struct stat* file_stat = malloc(sizeof(struct stat));  
-  int err = stat(fi->path,file_stat);
+  int err = lstat(fi->path,file_stat);
   if(err){
     clear_fileinfo(fi);
     free(file_stat);    
     perror("stat");
     return NULL;
   }  
+  
+  if(S_ISLNK(file_stat->st_mode)){
+    printf("Found link!!\n");
+  }
 
   fi->stat = file_stat;
   fi->type = determine_filetype(entry->d_type);
@@ -540,7 +617,7 @@ struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry)  {
 }
 
 void clear_fileinfo(struct fileinfo* fi){
-  if(fi){
+  if(fi) {
     if(fi->name) free(fi->name);
     if(fi->path) free(fi->path);
     if(fi->stat) free(fi->stat);
@@ -586,4 +663,19 @@ void print_usage_cmd(FILE* stream, int exit_code){
           "-l    --long    Display long list of information\n"
           "-v    --verbose Print verbose output \n");
   exit(exit_code);
+}
+
+void start_color(int attr, int fg, int bg)
+{
+   char command[13];
+   /* Command is the control command to the terminal */
+   sprintf(command, "%c[%d;%d;%dm", 0x1B, attr, fg + 30, bg + 40);
+   printf("%s", command);
+}
+
+void reset_color() 
+{
+
+  printf("%s",RESETCOLOR);
+  //   start_color(RESET, WHITE, BLACK);
 }
