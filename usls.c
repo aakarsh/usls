@@ -673,8 +673,10 @@ int fi_cmp_type(const void * i1, const void* i2)
 void print_usage_cmd(FILE* stream, int exit_code)
 {
   fprintf(stream,"Usage: %s  <options> [input file] \n",program_name);
+
   fprintf(stream,
           "-h    --help    Display this usage information\n"
+          "-i              Display inode numbers\n"
           "-l    --long    Display long list of information\n"
           "-v    --verbose Print verbose output \n");
   exit(exit_code);
