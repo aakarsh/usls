@@ -134,17 +134,4 @@ struct command* make_cmd(struct word_list* wd)
 }
 
 
-/*
-int main(int argc, char* argv[])
-{
-  while(!feof(stdin)) {
-    yyparse();
-  }
-  return 0;
-}
 
-void yyerror(char *s)
-{
-    fprintf(stderr, "%s\n", s);
-}
-*/
