@@ -13,16 +13,16 @@
 #include <pwd.h>
 #include <fnmatch.h>
 #include <ctype.h>
-
+#include <stdbool.h>
 
 const char* program_name;
 
 struct config {
-  int show_byte_counts;
-  int show_char_counts;
-  int show_line_counts;
-  int show_max_line;
-  int show_word_counts;
+  bool show_byte_counts;
+  bool show_char_counts;
+  bool show_line_counts;
+  bool show_max_line;
+  bool show_word_counts;
 };
 
 struct wc_result {
@@ -38,11 +38,11 @@ void clear_result(struct wc_result* res){
 }
 
 void config_init(struct config * config){
-  config->show_byte_counts = 0;
-  config->show_char_counts = 0;
-  config->show_line_counts = 0;
-  config->show_max_line = 0;
-  config->show_word_counts = 0;
+  config->show_byte_counts = false;
+  config->show_char_counts = false;
+  config->show_line_counts = false;
+  config->show_max_line = false;
+  config->show_word_counts = false;
 }
 
 int wc_cmd(FILE* stream, struct config * config,struct wc_result* res);
@@ -76,19 +76,19 @@ int main(int argc,char * argv[]){
       print_usage_cmd(stdout,0);      
       break;
     case 'c':
-      config.show_byte_counts = 1;
+      config.show_byte_counts = true;
       break;
     case 'm':
-      config.show_char_counts =1;
+      config.show_char_counts = true;
       break;
     case 'l':
-      config.show_line_counts=1;
+      config.show_line_counts = true;
       break;
     case 'L':
-      config.show_max_line = 1;
+      config.show_max_line = true;
       break;
     case 'w':
-      config.show_word_counts = 1;
+      config.show_word_counts = true;
       break;      
     case '?': // user specified invalid option
       print_usage_cmd(stderr,1);

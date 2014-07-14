@@ -15,7 +15,6 @@
 #include <math.h>
 #include <stdbool.h>
 
-
 const char* program_name;
 
 enum ls_sort_by
@@ -392,7 +391,6 @@ int list_directory_cmd(const char* pwd, struct ls_config* config)
         print_long_fileinfo(config,files[i]);
         int is_dir = S_ISDIR(files[i]->stat->st_mode);
         char* path = strdup(files[i]->path);
-        //            clear_fileinfo(files[i]);
 
         if(is_dir && config->recurse){
           printf("%s:\n",path);
@@ -495,7 +493,6 @@ void print_simple_fileinfo(struct print_config* pc,
         printf("%7ld ",fi->stat->st_ino);
       char fmt[15];
       snprintf(fmt,15,"%%-%ds  ",col_widths[i%num_cols]);
-      //      printf(fmt,fi->name);
       print_formatted_filename(fi,fmt);
       if((i+1)%num_cols==0 && i!=0){
         printf("\n");  
@@ -544,7 +541,7 @@ void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi )
   strftime(mod_time,100,"%b %d %H:%M",localtime(&(fi->stat->st_mtime)));
   printf("%9s ",mod_time);
   print_formatted_filename(fi,NULL);
-  printf("\n");  
+  printf("\n");
 }
 
 void print_formatted_filename(struct fileinfo* fi,char* format)
