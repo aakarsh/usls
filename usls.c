@@ -19,25 +19,25 @@
 const char* program_name;
 
 enum ls_sort_by
-  {
+{
     sort_by_nosort,
     sort_by_filename, 
     sort_by_size, 
     sort_by_mtime
-  };
+};
 
 enum ls_listing_type
-  {
+{
     listing_type_simple, 
     listing_type_long
-  };
+};
 
 enum ls_filter_type
 {
     filter_type_none, 
     filter_type_almost_none, 
     filter_type_normal
-  };
+};
 
 struct ignore_pattern
 {
@@ -106,8 +106,33 @@ static int list_directory_cmd(const char* pwd,
                               struct ls_config* config);
 
 
-enum term_text_type {Reset =0,Bright=1,Dim=2,Underline=3,Blink=4,Reverse=7,Hidden=8};
-enum term_colors    {Black=0,Red=1,Green=2,Yellow=3,Blue=4, Magenta=5,Cyan=6,White=7,Default=49};
+int fi_cmp_mtime(const void * i1, const void* i2);
+int fi_cmp_name(const void * i1, const void* i2);
+int fi_cmp_size(const void * i1, const void* i2);
+
+enum term_text_type
+{
+  Reset =0,
+  Bright=1,
+  Dim=2,
+  Underline=3,
+  Blink=4,
+  Reverse=7,
+  Hidden=8
+};
+
+enum term_colors
+{
+  Black=0,
+  Red=1,
+  Green=2,
+  Yellow=3,
+  Blue=4,
+  Magenta=5,
+  Cyan=6,
+  White=7,
+  Default=49
+};
 
 static void start_color(enum term_text_type attr, 
                         enum term_colors fg, 
@@ -115,18 +140,19 @@ static void start_color(enum term_text_type attr,
 
 static void reset_color();
 
-
 static void file_mode_string(mode_t md, char* str);
 enum filetype determine_filetype(unsigned char  d_type);
 
-void add_ignored_patterns(char* pat, struct ls_config* ls_config ){
+void add_ignored_patterns(char* pat, struct ls_config* ls_config )
+{
   struct ignore_pattern* node = malloc(sizeof(struct ignore_pattern));
   node->pattern  = pat;
   node->next = ls_config->ignored_patterns;
   ls_config->ignored_patterns = node;
 }
 
-void clear_ignored_patterns(struct ignore_pattern* ps){
+void clear_ignored_patterns(struct ignore_pattern* ps)
+{
   struct ignore_pattern* t=NULL;
   struct ignore_pattern* i = ps;
   while(i!=NULL){
@@ -136,9 +162,9 @@ void clear_ignored_patterns(struct ignore_pattern* ps){
   }
 }
 
-void ls_config_init(struct ls_config * config){
-    // defaults 
-  config->recurse =0;
+void ls_config_init(struct ls_config * config)
+{
+  config->recurse = false;
   config->display_inode_number =false;
   config->human_readable_size =false;
   config->sort_reverse = false;
@@ -149,8 +175,8 @@ void ls_config_init(struct ls_config * config){
   config->ignored_patterns = NULL;
 }
 
-int main(int argc,char * argv[]){
-
+int main(int argc,char * argv[])
+{
   program_name = argv[0];
 
   int next_opt = false;
@@ -244,32 +270,8 @@ int main(int argc,char * argv[]){
   return 0;
 }
 
-// Macros
-int fi_cmp_mtime(const void * i1, const void* i2){
-  struct fileinfo** fi1 = (struct fileinfo**)i1;
-  struct fileinfo** fi2 = (struct fileinfo**)i2;
-  return (*fi1)->stat->st_mtime < (*fi2)->stat->st_mtime;
-}
-
-int fi_cmp_name(const void * i1, const void* i2){
-  struct fileinfo** fi1 = (struct fileinfo**)i1;
-  struct fileinfo** fi2 = (struct fileinfo**)i2;
-  return strcmp((*fi1)->name,(*fi2)->name);
-}
-
-int fi_cmp_size(const void * i1, const void* i2){
-  struct fileinfo** fi1 = (struct fileinfo**)i1;
-  struct fileinfo** fi2 = (struct fileinfo**)i2;
-  return (*fi1)->stat->st_size > (*fi2)->stat->st_size;
-}
-
-int fi_cmp_type(const void * i1, const void* i2){
-  struct fileinfo** fi1 = (struct fileinfo**)i1;
-  struct fileinfo** fi2 = (struct fileinfo**)i2;
-  return (*fi1)->type > (*fi2)->type;
-}
-
-int list_directory_cmd(const char* pwd, struct ls_config* config) {
+int list_directory_cmd(const char* pwd, struct ls_config* config) 
+{
 
   DIR* dir = opendir(pwd);
   char err_no_dir[2048];
@@ -414,7 +416,8 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
   return 0;
 }
 
-void filetype_sdesc(char** s,enum filetype type) {
+void filetype_sdesc(char** s,enum filetype type)
+{
   const char* desc;
   switch(type){
   case blockdev:
@@ -442,7 +445,8 @@ void filetype_sdesc(char** s,enum filetype type) {
   *s = strdup(desc);
 }
 
-void file_mode_string(mode_t md,char* str) {
+void file_mode_string(mode_t md,char* str)
+{
   strcpy(str,"---------");
   if(md & S_IRUSR) str[0]='r';
   if(md & S_IWUSR) str[1]='w';
@@ -500,8 +504,6 @@ void print_simple_fileinfo(struct print_config* pc,
   if(i%num_cols!=0)
     printf("\n");
 }
-
-
 
 void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi )
 {
@@ -575,8 +577,8 @@ void print_formatted_filename(struct fileinfo* fi,char* format)
   reset_color();
 }
 
-
-struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry)  {
+struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry)  
+{
   struct fileinfo* fi = malloc(sizeof(struct fileinfo));
   fi->name =  strdup(entry->d_name);
   char p[PATH_MAX];
@@ -603,7 +605,8 @@ struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry)  {
   return fi;
 }
 
-void clear_fileinfo(struct fileinfo* fi){
+void clear_fileinfo(struct fileinfo* fi)
+{
   if(fi) {
     if(fi->name) free(fi->name);
     if(fi->path) free(fi->path);
@@ -613,7 +616,8 @@ void clear_fileinfo(struct fileinfo* fi){
   }
 }
 
-enum filetype determine_filetype(unsigned char  d_type){
+enum filetype determine_filetype(unsigned char  d_type)
+{
   enum filetype ft;
   switch(d_type){
   case DT_BLK:
@@ -641,7 +645,36 @@ enum filetype determine_filetype(unsigned char  d_type){
   return ft;
 }
 
-void print_usage_cmd(FILE* stream, int exit_code){
+int fi_cmp_mtime(const void * i1, const void* i2)
+{
+  struct fileinfo** fi1 = (struct fileinfo**)i1;
+  struct fileinfo** fi2 = (struct fileinfo**)i2;
+  return (*fi1)->stat->st_mtime < (*fi2)->stat->st_mtime;
+}
+
+int fi_cmp_name(const void * i1, const void* i2)
+{
+  struct fileinfo** fi1 = (struct fileinfo**)i1;
+  struct fileinfo** fi2 = (struct fileinfo**)i2;
+  return strcmp((*fi1)->name,(*fi2)->name);
+}
+
+int fi_cmp_size(const void * i1, const void* i2)
+{
+  struct fileinfo** fi1 = (struct fileinfo**)i1;
+  struct fileinfo** fi2 = (struct fileinfo**)i2;
+  return (*fi1)->stat->st_size > (*fi2)->stat->st_size;
+}
+
+int fi_cmp_type(const void * i1, const void* i2)
+{
+  struct fileinfo** fi1 = (struct fileinfo**)i1;
+  struct fileinfo** fi2 = (struct fileinfo**)i2;
+  return (*fi1)->type > (*fi2)->type;
+}
+
+void print_usage_cmd(FILE* stream, int exit_code)
+{
   fprintf(stream,"Usage: %s  <options> [input file] \n",program_name);
   fprintf(stream,
           "-h    --help    Display this usage information\n"
