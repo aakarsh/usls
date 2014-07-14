@@ -12,6 +12,7 @@
 #include <grp.h>
 #include <pwd.h>
 #include <fnmatch.h>
+#include <math.h>
 
 
 #ifndef bool
@@ -77,6 +78,7 @@ struct ls_config
   bool filter_backups;
   enum ls_filter_type filter_type;
   bool display_inode_number;
+  bool human_readable_size;
   bool sort_reverse ;
   enum ls_sort_by sort_by;
   enum ls_listing_type listing_type;  
@@ -100,7 +102,8 @@ enum filetype
 struct fileinfo 
 {
   char* name;
-  char* path;
+  char* path; // realpath
+  char* suppied_path; 
   enum filetype type;
   struct stat* stat;
 };
@@ -155,6 +158,7 @@ void ls_config_init(struct ls_config * config){
     // defaults 
   config->recurse =0;
   config->display_inode_number =0;
+  config->human_readable_size =0;
   config->sort_reverse = 0;
   config->sort_by = sort_by_filename;
   config->listing_type = listing_type_simple;
@@ -182,7 +186,7 @@ int main(int argc,char * argv[]){
     {"ignore",1,NULL,'I'},
     {NULL,0,NULL,'i'},
     {"ignore-backups",0,NULL,'B'},
-    {"help",0,NULL,'h'},
+    {"human-readable",0,NULL,'h'},
     {NULL,0,NULL,'U'},
     {"status",0,NULL,'s'},
     {"sort-size",0,NULL,'S'},
@@ -199,7 +203,8 @@ int main(int argc,char * argv[]){
     extern int optind;
     switch(next_opt){
     case 'h':
-      print_usage_cmd(stdout,0);      
+      //      print_usage_cmd(stdout,0);      
+      config.human_readable_size = 1;
       break;
     case 'i':
       config.display_inode_number =1;
@@ -406,8 +411,9 @@ int list_directory_cmd(const char* pwd, struct ls_config* config) {
   
   switch(config->listing_type){
   case listing_type_long:    
-    
+    // TODO this should be the size of the directory
     printf("total %d\n",num_entries);
+
     fflush(stdout);
 
     for( i =0 ; i < num_entries; i++){
@@ -525,16 +531,19 @@ void print_formatted_filename(struct fileinfo* fi);
 
 void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi )
 {
-  if(config->display_inode_number!=0)
+  if(config->display_inode_number)
     printf("%7ld ",fi->stat->st_ino);
 
   char* desc;
   filetype_sdesc(&desc,fi->type);
   printf("%1s",desc);
   free(desc);
+
   char mode_str[10];
   file_mode_string(fi->stat->st_mode,mode_str);
   printf("%9s ",mode_str);
+
+  printf("%3d",fi->stat->st_nlink);
 
   struct passwd* pw = getpwuid(fi->stat->st_uid);
   printf("%9s ",pw->pw_name);
@@ -542,7 +551,18 @@ void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi )
   struct group* group_info =  getgrgid(fi->stat->st_gid);    
   printf("%9s ",group_info->gr_name);
 
-  printf("%8ld ",fi->stat->st_size);
+  double sz = fi->stat->st_size;  
+  if(config->human_readable_size) {
+    if(sz > (1<<20)) {
+      printf("%6.1fM ", sz/pow(2,20));
+    } else if(sz > (1<<10)){
+      printf("%6.1fK ",sz/pow(2,10));
+    }else{
+      printf("%6.0f  ",sz);
+    }
+  } else{
+    printf("%8d  ",(int)sz);
+  }
 
   char mod_time[100];
   strftime(mod_time,100,"%b %d %H:%M",localtime(&(fi->stat->st_mtime)));
@@ -564,19 +584,19 @@ void print_formatted_filename(struct fileinfo* fi)
   default:
     reset_color();
   }
-  if(fi->type == normal){
+  if(fi->type == normal) {
     if(fi->stat->st_mode & S_IXUSR) 
       start_color(BRIGHT, GREEN, DEFAULT);    
   }
 
   if(S_ISLNK(fi->stat->st_mode)) {
     start_color(DIM, BLUE, DEFAULT);
-    struct stat l_stat;
-    bool err = lstat(fi->path,&l_stat);
-    if(!err){
+    //    struct stat l_stat;
+    //    bool err = lstat(fi->path,&l_stat);
+    //    if(!err){
       printf("%s -> %s",fi->name,fi->path);
       //      l_stat
-    }
+      //    }
     reset_color();
     return;
   }
@@ -592,6 +612,7 @@ struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry)  {
   char p[PATH_MAX];
   sprintf(p,"%s/%s",dir_path,entry->d_name);
   fi->path = malloc(PATH_MAX);
+  fi->suppied_path = strdup(p);
   if(!realpath(p,fi->path)) {
     clear_fileinfo(fi);
     perror("realpath");
@@ -599,18 +620,13 @@ struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry)  {
   }
 
   struct stat* file_stat = malloc(sizeof(struct stat));  
-  int err = lstat(fi->path,file_stat);
+  int err = lstat(fi->suppied_path,file_stat);
   if(err){
     clear_fileinfo(fi);
     free(file_stat);    
     perror("stat");
     return NULL;
   }  
-  
-  if(S_ISLNK(file_stat->st_mode)){
-    printf("Found link!!\n");
-  }
-
   fi->stat = file_stat;
   fi->type = determine_filetype(entry->d_type);
   return fi;
@@ -620,7 +636,9 @@ void clear_fileinfo(struct fileinfo* fi){
   if(fi) {
     if(fi->name) free(fi->name);
     if(fi->path) free(fi->path);
+    if(fi->suppied_path) free(fi->suppied_path);
     if(fi->stat) free(fi->stat);
+
     free(fi);
   }
 }

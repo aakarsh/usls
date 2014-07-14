@@ -4,7 +4,7 @@ all: uls ucat ush
 
 uls: usls.c 
 	gcc -g -Wall $(INCLUDE_FLAGS) -o bin/uls usls.c
-
+	cp bin/* ~/bin
 
 ucat: ucat.c 
 	gcc -g -Wall -o bin/ucat ucat.c
@@ -15,8 +15,6 @@ ush: ush_lex.l ush_parser.y
 	gcc -o obj/ush_lex.o -Igen/ $(INCLUDE_FLAGS) -c gen/ush_lex.yy.c -lfl -ly
 	gcc -g -Wall -Lobj -Igen/  $(INCLUDE_FLAGS) -o bin/ush ush.c obj/ush_lex.o -lfl -ly
 
-cp-bin: bin/ucat bin/ush bin/uls 
-	cp bin/* ~/bin
 
 clean:
 	$(RM) bin/*
