@@ -35,19 +35,19 @@ enum ls_listing_type
   };
 
 enum ls_filter_type
-  {
+{
     filter_type_none, 
     filter_type_almost_none, 
     filter_type_normal
   };
 
-typedef struct ignore_pattern
-  {
-   char* pattern;
-   struct ignore_pattern* next;
-  } ignore_pattern_t;
+struct ignore_pattern
+{
+char* pattern;
+struct ignore_pattern* next;
+};
 
-typedef struct ls_config 
+struct ls_config 
 {
   bool recurse;
   bool filter_backups;
@@ -56,30 +56,30 @@ typedef struct ls_config
   bool sort_reverse ;
   enum ls_sort_by sort_by;
   enum ls_listing_type listing_type;  
-  ignore_pattern_t* ignored_patterns;
-} ls_config_t;
+  struct ignore_pattern* ignored_patterns;
+};
 
-typedef enum filetype 
-  {
-    unknown,
-    fifo,
-    chardev,
-    directory,
-    blockdev,
-    normal,
-    symbolic_link,
-    sock,
-    whiteout,
-    arg_directory
-  } filetype_t;
+enum filetype 
+{
+  unknown,
+  fifo,
+  chardev,
+  directory,
+  blockdev,
+  normal,
+  symbolic_link,
+  sock,
+  whiteout,
+  arg_directory
+};
 
-typedef struct fileinfo 
+struct fileinfo 
 {
   char* name;
   char* path;
-  filetype_t type;
+  enum filetype type;
   struct stat* stat;
-} fileinfo_t;
+};
 
 struct print_config
 {
@@ -88,19 +88,19 @@ struct print_config
   int num_files;
 };
 
-fileinfo_t* create_fileinfo(const char* dir_path,struct dirent* entry);
-void clear_fileinfo(fileinfo_t* fi);
+struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry);
+void clear_fileinfo(struct fileinfo* fi);
 
-void print_simple_fileinfo(struct print_config* pc, ls_config_t* config ,fileinfo_t** fi );
+void print_simple_fileinfo(struct print_config* pc, struct ls_config* config ,struct fileinfo** fi );
 void print_usage_cmd(FILE* stream, int exit_code);
 int file_status_cmd(const char* file_name );
-int list_directory_cmd(const char* pwd, ls_config_t* config) ;
-void print_long_fileinfo(ls_config_t* config ,fileinfo_t* fi );
+int list_directory_cmd(const char* pwd, struct ls_config* config) ;
+void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi );
 void file_mode_string(mode_t md,char* str);
-filetype_t determine_filetype(unsigned char  d_type);
+enum filetype determine_filetype(unsigned char  d_type);
 
 
-void add_ignored_patterns(char* pat, ls_config_t* ls_config ){
+void add_ignored_patterns(char* pat, struct ls_config* ls_config ){
   struct ignore_pattern* node = malloc(sizeof(struct ignore_pattern));
   node->pattern  = pat;
   node->next = ls_config->ignored_patterns;
@@ -117,7 +117,7 @@ void clear_ignored_patterns(struct ignore_pattern* ps){
   }
 }
 
-void ls_config_init(ls_config_t * config){
+void ls_config_init(struct ls_config * config){
     // defaults 
   config->recurse =0;
   config->display_inode_number =0;
@@ -134,7 +134,7 @@ int main(int argc,char * argv[]){
   program_name = argv[0];
   int next_opt = 0;
 
-  ls_config_t config;
+  struct ls_config config;
   ls_config_init(&config);
 
   const char* short_options = "iaABrSshvltURI:";
@@ -230,32 +230,32 @@ int main(int argc,char * argv[]){
 
 // Macros
 int fi_cmp_mtime(const void * i1, const void* i2){
-  fileinfo_t** fi1 = (fileinfo_t**)i1;
-  fileinfo_t** fi2 = (fileinfo_t**)i2;
+  struct fileinfo** fi1 = (struct fileinfo**)i1;
+  struct fileinfo** fi2 = (struct fileinfo**)i2;
   return (*fi1)->stat->st_mtime < (*fi2)->stat->st_mtime;
 }
 
 int fi_cmp_name(const void * i1, const void* i2){
-  fileinfo_t** fi1 = (fileinfo_t**)i1;
-  fileinfo_t** fi2 = (fileinfo_t**)i2;
+  struct fileinfo** fi1 = (struct fileinfo**)i1;
+  struct fileinfo** fi2 = (struct fileinfo**)i2;
   return strcmp((*fi1)->name,(*fi2)->name);
 }
 
 int fi_cmp_size(const void * i1, const void* i2){
-  fileinfo_t** fi1 = (fileinfo_t**)i1;
-  fileinfo_t** fi2 = (fileinfo_t**)i2;
+  struct fileinfo** fi1 = (struct fileinfo**)i1;
+  struct fileinfo** fi2 = (struct fileinfo**)i2;
   return (*fi1)->stat->st_size > (*fi2)->stat->st_size;
 }
 
 int fi_cmp_type(const void * i1, const void* i2){
-  fileinfo_t** fi1 = (fileinfo_t**)i1;
-  fileinfo_t** fi2 = (fileinfo_t**)i2;
+  struct fileinfo** fi1 = (struct fileinfo**)i1;
+  struct fileinfo** fi2 = (struct fileinfo**)i2;
   return (*fi1)->type > (*fi2)->type;
 }
 
 
 
-int list_directory_cmd(const char* pwd, ls_config_t* config) {
+int list_directory_cmd(const char* pwd, struct ls_config* config) {
 
   DIR* dir = opendir(pwd);
   char err_no_dir[2048];
@@ -268,7 +268,7 @@ int list_directory_cmd(const char* pwd, ls_config_t* config) {
   int num_entries = 0;
   bool alloc_entries = 1;
 
-  fileinfo_t** files = malloc(alloc_entries*sizeof(fileinfo_t *));
+  struct fileinfo** files = malloc(alloc_entries*sizeof(struct fileinfo *));
   struct dirent * entry;  
   char* ignored_files [] ={".",".."};
   int nignored = 2;
@@ -310,7 +310,7 @@ int list_directory_cmd(const char* pwd, ls_config_t* config) {
     if(num_entries >= alloc_entries){
       alloc_entries = alloc_entries*2;
       //TODO: fix heap corruption   
-      fileinfo_t** p = realloc(files, alloc_entries* sizeof(fileinfo_t*));
+      struct fileinfo** p = realloc(files, alloc_entries* sizeof(struct fileinfo*));
       if(!p){
         printf("Error in realloc \n");
         return 1;
@@ -319,7 +319,7 @@ int list_directory_cmd(const char* pwd, ls_config_t* config) {
     }    
 
 
-    fileinfo_t* fi = create_fileinfo(pwd,entry);    
+    struct fileinfo* fi = create_fileinfo(pwd,entry);    
     if(!fi){
       printf("error getting fileinfo for %s/%s \n",pwd,entry->d_name);
       num_entries++;
@@ -335,17 +335,17 @@ int list_directory_cmd(const char* pwd, ls_config_t* config) {
   switch(config->sort_by) {
   case sort_by_nosort: break;
   case sort_by_size:
-    qsort(files,num_entries,sizeof(fileinfo_t*), &fi_cmp_size);
+    qsort(files,num_entries,sizeof(struct fileinfo*), &fi_cmp_size);
     break;
   case sort_by_mtime:
-    qsort(files,num_entries,sizeof(fileinfo_t*), &fi_cmp_mtime);
+    qsort(files,num_entries,sizeof(struct fileinfo*), &fi_cmp_mtime);
     break;
   default:
-    qsort(files,num_entries,sizeof(fileinfo_t*), &fi_cmp_name);
+    qsort(files,num_entries,sizeof(struct fileinfo*), &fi_cmp_name);
   }
 
   if(config->sort_reverse) {
-    fileinfo_t* tmp;
+    struct fileinfo* tmp;
     int i;
     for(i=0; i < (num_entries+1)/2 ;i++){
       tmp = files[i];
@@ -403,7 +403,7 @@ int list_directory_cmd(const char* pwd, ls_config_t* config) {
   return 0;
 }
 
-void filetype_sdesc(char** s,filetype_t type) {
+void filetype_sdesc(char** s,enum filetype type) {
   const char* desc;
   switch(type){
   case blockdev:
@@ -446,8 +446,8 @@ void file_mode_string(mode_t md,char* str) {
 }
 
 void print_simple_fileinfo(struct print_config* pc, 
-                           ls_config_t* config,
-                           fileinfo_t** files) {
+                           struct ls_config* config,
+                           struct fileinfo** files) {
 
   int max_column_width =(pc->max_filename_len);
   int num_cols = pc->line_len/max_column_width;
@@ -471,7 +471,7 @@ void print_simple_fileinfo(struct print_config* pc,
   for(i=0;i<pc->num_files;i++){
       if(files[i]==NULL)
         continue;
-      fileinfo_t* fi = files[i];
+      struct fileinfo* fi = files[i];
       if(config->display_inode_number!=0)
         printf("%7ld ",fi->stat->st_ino);
       char fmt[15];
@@ -485,7 +485,7 @@ void print_simple_fileinfo(struct print_config* pc,
     printf("\n");
 }
 
-void print_long_fileinfo(ls_config_t* config ,fileinfo_t* fi ){
+void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi ){
   if(config->display_inode_number!=0)
     printf("%7ld ",fi->stat->st_ino);
 
@@ -513,8 +513,8 @@ void print_long_fileinfo(ls_config_t* config ,fileinfo_t* fi ){
 }
 
 
-fileinfo_t* create_fileinfo(const char* dir_path,struct dirent* entry)  {
-  fileinfo_t* fi = malloc(sizeof(fileinfo_t));
+struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry)  {
+  struct fileinfo* fi = malloc(sizeof(struct fileinfo));
   fi->name =  strdup(entry->d_name);
   char p[PATH_MAX];
   sprintf(p,"%s/%s",dir_path,entry->d_name);
@@ -539,7 +539,7 @@ fileinfo_t* create_fileinfo(const char* dir_path,struct dirent* entry)  {
   return fi;
 }
 
-void clear_fileinfo(fileinfo_t* fi){
+void clear_fileinfo(struct fileinfo* fi){
   if(fi){
     if(fi->name) free(fi->name);
     if(fi->path) free(fi->path);
@@ -548,8 +548,8 @@ void clear_fileinfo(fileinfo_t* fi){
   }
 }
 
-filetype_t determine_filetype(unsigned char  d_type){
-  filetype_t ft;
+enum filetype determine_filetype(unsigned char  d_type){
+  enum filetype ft;
   switch(d_type){
   case DT_BLK:
     ft = blockdev;
