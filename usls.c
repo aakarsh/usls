@@ -18,49 +18,46 @@
 #define bool int
 #endif
 
-/**
- *   Adapted from ALS.
- */
 const char* program_name;
 
-typedef enum ls_sort_by
+enum ls_sort_by
   {
-  sort_by_nosort, 
-  sort_by_filename, 
-  sort_by_size, 
-  sort_by_mtime
-  } ls_sort_by_t;
+    sort_by_nosort,
+    sort_by_filename, 
+    sort_by_size, 
+    sort_by_mtime
+  };
 
-typedef enum ls_listing_type
+enum ls_listing_type
   {
     listing_type_simple, 
     listing_type_long
-  } ls_listing_type_t;
+  };
 
-typedef enum ls_filter_type
+enum ls_filter_type
   {
     filter_type_none, 
     filter_type_almost_none, 
     filter_type_normal
-  } ls_filter_type_t;
+  };
 
 typedef struct ignore_pattern
-{
-  char* pattern;
-  struct ignore_pattern* next;
-} ignore_pattern_t;
+  {
+   char* pattern;
+   struct ignore_pattern* next;
+  } ignore_pattern_t;
 
-struct ls_config 
+typedef struct ls_config 
 {
   bool recurse;
   bool filter_backups;
-  ls_filter_type_t filter_type;
+  enum ls_filter_type filter_type;
   bool display_inode_number;
   bool sort_reverse ;
-  ls_sort_by_t sort_by;
-  ls_listing_type_t listing_type;  
+  enum ls_sort_by sort_by;
+  enum ls_listing_type listing_type;  
   ignore_pattern_t* ignored_patterns;
-};
+} ls_config_t;
 
 typedef enum filetype 
   {
@@ -94,16 +91,16 @@ struct print_config
 fileinfo_t* create_fileinfo(const char* dir_path,struct dirent* entry);
 void clear_fileinfo(fileinfo_t* fi);
 
-void print_simple_fileinfo(struct print_config* pc, struct ls_config* config ,fileinfo_t** fi );
+void print_simple_fileinfo(struct print_config* pc, ls_config_t* config ,fileinfo_t** fi );
 void print_usage_cmd(FILE* stream, int exit_code);
 int file_status_cmd(const char* file_name );
-int list_directory_cmd(const char* pwd, struct ls_config* config) ;
-void print_long_fileinfo(struct ls_config* config ,fileinfo_t* fi );
+int list_directory_cmd(const char* pwd, ls_config_t* config) ;
+void print_long_fileinfo(ls_config_t* config ,fileinfo_t* fi );
 void file_mode_string(mode_t md,char* str);
 filetype_t determine_filetype(unsigned char  d_type);
 
 
-void add_ignored_patterns(char* pat, struct ls_config* ls_config ){
+void add_ignored_patterns(char* pat, ls_config_t* ls_config ){
   struct ignore_pattern* node = malloc(sizeof(struct ignore_pattern));
   node->pattern  = pat;
   node->next = ls_config->ignored_patterns;
@@ -120,7 +117,7 @@ void clear_ignored_patterns(struct ignore_pattern* ps){
   }
 }
 
-void ls_config_init(struct ls_config * config){
+void ls_config_init(ls_config_t * config){
     // defaults 
   config->recurse =0;
   config->display_inode_number =0;
@@ -137,7 +134,7 @@ int main(int argc,char * argv[]){
   program_name = argv[0];
   int next_opt = 0;
 
-  struct ls_config config;
+  ls_config_t config;
   ls_config_init(&config);
 
   const char* short_options = "iaABrSshvltURI:";
@@ -258,7 +255,7 @@ int fi_cmp_type(const void * i1, const void* i2){
 
 
 
-int list_directory_cmd(const char* pwd, struct ls_config* config) {
+int list_directory_cmd(const char* pwd, ls_config_t* config) {
 
   DIR* dir = opendir(pwd);
   char err_no_dir[2048];
@@ -449,7 +446,7 @@ void file_mode_string(mode_t md,char* str) {
 }
 
 void print_simple_fileinfo(struct print_config* pc, 
-                           struct ls_config* config,
+                           ls_config_t* config,
                            fileinfo_t** files) {
 
   int max_column_width =(pc->max_filename_len);
@@ -488,7 +485,7 @@ void print_simple_fileinfo(struct print_config* pc,
     printf("\n");
 }
 
-void print_long_fileinfo(struct ls_config* config ,fileinfo_t* fi ){
+void print_long_fileinfo(ls_config_t* config ,fileinfo_t* fi ){
   if(config->display_inode_number!=0)
     printf("%7ld ",fi->stat->st_ino);
 
@@ -506,15 +503,12 @@ void print_long_fileinfo(struct ls_config* config ,fileinfo_t* fi ){
   struct group* group_info =  getgrgid(fi->stat->st_gid);    
   printf("%9s ",group_info->gr_name);
 
-
-
   printf("%8ld ",fi->stat->st_size);
 
   char mod_time[100];
   strftime(mod_time,100,"%b %d %H:%M",localtime(&(fi->stat->st_mtime)));
   printf("%9s ",mod_time);
   printf("%s",fi->name);
-
   printf("\n");  
 }
 
