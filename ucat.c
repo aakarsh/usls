@@ -12,25 +12,25 @@
 #include <grp.h>
 #include <pwd.h>
 #include <fnmatch.h>
-
+#include <stdbool.h>
 
 
 const char* program_name;
 
 struct config {
-  int show_numbers;
-  int show_numbers_non_blank;
-  int show_tabs;
-  int show_ends;
-  int squeeze_blanks;
+  bool show_numbers;
+  bool show_numbers_non_blank;
+  bool show_tabs;
+  bool show_ends;
+  bool squeeze_blanks;
 };
 
 void config_init(struct config * config){
-  config->show_numbers = 0;
-  config->show_numbers_non_blank =0;
-  config->show_tabs = 0;
-  config->show_ends = 0;
-  config->squeeze_blanks = 0;
+  config->show_numbers = false;
+  config->show_numbers_non_blank = false;
+  config->show_tabs = false;
+  config->show_ends = false;
+  config->squeeze_blanks = false;
 }
 int cat_cmd(FILE* stream, struct config * config);
 void print_usage_cmd(FILE* stream, int exit_code);
@@ -63,20 +63,20 @@ int main(int argc,char * argv[]){
       print_usage_cmd(stdout,0);      
       break;
     case 'n':
-      config.show_numbers =1;
+      config.show_numbers = true;
       break;
     case 'b':
-      config.show_numbers_non_blank =1;
-      config.show_numbers = 0;
+      config.show_numbers_non_blank = true;
+      config.show_numbers = false;
       break;
     case 'T':
-      config.show_tabs = 1;
+      config.show_tabs = true;
       break;
     case 'E':
-      config.show_ends = 1;
+      config.show_ends = true;
       break;
     case 's':
-      config.squeeze_blanks =1;
+      config.squeeze_blanks = true;
       break;
     case '?': // user specified invalid option
       print_usage_cmd(stderr,1);
@@ -124,7 +124,7 @@ int cat_cmd(FILE* stream, struct config * config){
   int  LINE_LEN = 2048;
   char line_buffer[LINE_LEN];
   int cnt = 1;
-  int last_line_empty = 0;
+  bool last_line_empty = false;
 
   while(fgets(line_buffer,LINE_LEN,stream) != NULL){
     int len =  strlen(line_buffer);
@@ -137,9 +137,9 @@ int cat_cmd(FILE* stream, struct config * config){
       if(last_line_empty && config->squeeze_blanks ){
         goto loop_end;
       }
-      last_line_empty = 1;
+      last_line_empty = true;
     } else{
-      last_line_empty = 0;
+      last_line_empty = false;
     }
 
     if( len > 1 && config->show_numbers_non_blank) {

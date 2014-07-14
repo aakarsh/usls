@@ -1,9 +1,13 @@
 INCLUDE_FLAGS= -I. -Igen/
 
-all: uls ucat ush 
+all: uls ucat uwc ush
 
 uls: usls.c 
 	gcc -g -Wall $(INCLUDE_FLAGS) -o bin/uls usls.c
+	cp bin/* ~/bin
+
+uwc: uwc.c 
+	gcc -g -Wall $(INCLUDE_FLAGS) -o bin/uwc uwc.c
 	cp bin/* ~/bin
 
 ucat: ucat.c 
