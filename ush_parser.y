@@ -18,9 +18,7 @@ typedef struct word_list {
     struct word_list*  next;
 } WORD_LIST;
 
-enum r_instruction {
-    r_output_direction,r_input_direction
-};
+enum r_instruction {r_output_direction, r_input_direction};
 
 typedef union {
     int dest;
@@ -33,20 +31,30 @@ struct redirect {
     REDIRECTEE redirector;
 };
 
-struct command{    
-    struct word_list* value;    
+enum command_type{c_simple,c_connection};
+
+typedef struct simple_command{    
+    WORD_LIST* value;    
     struct redirect* redirect;
-    struct command* next;
-};
+    struct simple_command* next;
+} COMMAND;
+
+enum connection_type {connection_type_pipe,connection_type_and , connection_type_or};
+
+typedef struct connection{
+    COMMAND* first;
+    COMMAND* second;
+    enum connection_type type;
+} CONNECTION;
 
 
-struct command* parsed_command_list  = NULL;
+COMMAND* parsed_command_list  = NULL;
 struct redirect* make_redirect(struct word* word,enum r_instruction);
-struct word_list* make_word_list_node(struct word* word);
-struct word_list* add_word_list(struct word_list** list , struct word* word) ;
+WORD_LIST* make_word_list_node(struct word* word);
+WORD_LIST* add_word_list(WORD_LIST** list , struct word* word) ;
 struct word*  make_word(char* str);
-struct command* make_cmd(struct word_list* wd);
-struct command* add_cmd(struct command* cmd);
+COMMAND* make_cmd(WORD_LIST* wd);
+COMMAND* add_cmd(COMMAND* cmd);
 
 %}
 
@@ -55,8 +63,8 @@ struct command* add_cmd(struct command* cmd);
   double dval;
   struct word* word_val;
   struct word_list* word_list;
-  struct command* command_list;
-  struct command* command;
+  struct simple_command* command_list;
+  struct simple_command* command;
   struct redirect* redirect_val;
 }
 
@@ -81,7 +89,7 @@ start: command-list
 command-list:   
        command '|' command-list   
              { 
-                 //printf("[parser piped %s]\n ",$1->value->value); 
+                 printf("[parser piped]\n "); 
                  $1->next = $3;
                  $$ = $1;
              } 
@@ -95,7 +103,7 @@ command-list:
 
 command:  word-list ';' command
                       {
-                          struct command*  cmd = make_cmd($1);
+                          COMMAND*  cmd = make_cmd($1);
                           cmd->next = $3;
                           $$ = cmd;
                       }
@@ -126,7 +134,7 @@ redirect:     '>' word  {
 
 word-list: word word-list 
                     { 
-                        struct word_list* lst = $2;
+                        WORD_LIST* lst = $2;
                         $$ = add_word_list(&lst,$1);
                     }
           | word     {
@@ -141,6 +149,19 @@ word: WORD_TOK      {
 ;
 
 %%
+
+COMMAND* make_connection(COMMAND* first , COMMAND* second,enum connection_type type)
+{
+    CONNECTION* conn = malloc(sizeof(CONNECTION));
+    conn->first = first;
+    conn->second = second;
+    conn->type  =type;
+
+    //    COMMAND* cmd = malloc(sizeof(COMMAND));     
+    //    COMMAND* cmd = malloc(sizeof(COMMAND));
+    //    cmd->
+    return NULL;
+}
 struct redirect* make_redirect(struct word* word,enum r_instruction instruction)
 {
     struct redirect* r = malloc(sizeof(struct redirect));
@@ -149,17 +170,17 @@ struct redirect* make_redirect(struct word* word,enum r_instruction instruction)
     r->next = NULL;
     return r;
 }
-struct word_list* add_word_list(struct word_list** list , struct word* word) 
+WORD_LIST* add_word_list(WORD_LIST** list , struct word* word) 
 {
-    struct word_list* node = make_word_list_node(word);
+    WORD_LIST* node = make_word_list_node(word);
     node->next = *list;
     *list = node;    
     return *list;
 }
 
-struct word_list* make_word_list_node(struct word* word) 
+WORD_LIST* make_word_list_node(struct word* word) 
 {
-    struct word_list* word_list = malloc(sizeof (struct word_list));
+    WORD_LIST* word_list = malloc(sizeof (WORD_LIST));
     word_list->value = word;
     word_list->next = NULL;
     word_list->size = 1;
@@ -174,26 +195,10 @@ struct word*  make_word(char* str)
     return wd;
 }
 
-struct command* make_cmd(struct word_list* wd) 
+COMMAND* make_cmd(WORD_LIST* wd) 
 {
-    struct command* cmd   = malloc(sizeof (struct command*));
+    COMMAND* cmd   = malloc(sizeof (COMMAND*));
     cmd->value = wd;
     cmd->next = NULL;
     return cmd;
 }
-
-
-/*
-int main(int argc, char* argv[])
-{
-  while(!feof(stdin)) {
-    yyparse();
-  }
-  return 0;
-}
-
-void yyerror(char *s)
-{
-    fprintf(stderr, "%s\n", s);
-}
-*/

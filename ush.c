@@ -25,7 +25,7 @@ void yyerror(char *s)
 }
 
 //  Populated by the yacc parser.
-extern struct command* parsed_command_list;
+extern struct simple_command* parsed_command_list;
 
 const char* program_name;
 
@@ -40,8 +40,8 @@ void print_usage_cmd(FILE* stream, int exit_code);
 void prompt(FILE* s);
 char* find_cmd(char* s);
 
-void clear_commands(struct command** pcl){
-  struct command *i = NULL,*next;
+void clear_commands(struct simple_command** pcl){
+  struct simple_command *i = NULL,*next;
   for(i  = *pcl; i ; i = next) {
     free(i->value->value);
     free(i->value);
@@ -100,7 +100,7 @@ int main(int argc,char * argv[])
       goto exit;
     }
 
-    struct command* i  = parsed_command_list;
+    struct simple_command* i  = parsed_command_list;
     for(;i!=NULL; i = i->next) {      
 
       char* cmd = i->value->value->value;

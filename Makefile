@@ -5,6 +5,9 @@ all: uls ucat ush cp-bin
 uls: usls.c 
 	gcc -g -Wall $(INCLUDE_FLAGS) -o bin/uls usls.c
 
+uthread: uthread.c 
+	gcc -g -Wall $(INCLUDE_FLAGS) -o bin/uthread uthread.c
+
 
 ucat: ucat.c 
 	gcc -g -Wall -o bin/ucat ucat.c
