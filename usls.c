@@ -183,7 +183,7 @@ int main(int argc,char * argv[])
   struct ls_config config;
   ls_config_init(&config);
 
-  const char* short_options = "iaABrSshvltURI:";
+  const char* short_options = "iaABrSshvltUR?I:";
 
   const struct option long_options[] = {
     {"all",0,NULL,'a'},
@@ -246,7 +246,7 @@ int main(int argc,char * argv[])
       config.listing_type = listing_type_long;
       break;
     case '?': // user specified invalid option
-      print_usage_cmd(stderr,1);
+      print_usage_cmd(stderr,0);
     case -1:
       break;
     default:
@@ -267,6 +267,23 @@ int main(int argc,char * argv[])
   } 
   list_directory_cmd(dir,&config);
   return 0;
+}
+
+typedef int (*sort_function_t)(const void *, const void *);
+
+sort_function_t sort_function(enum ls_sort_by sortby)
+{
+  switch(sortby){
+  case sort_by_size:
+    return &fi_cmp_size;
+  case sort_by_filename:
+    return &fi_cmp_name;
+  case sort_by_mtime:
+    return &fi_cmp_mtime;
+  case sort_by_nosort:
+    return NULL;
+  }
+  return NULL;
 }
 
 int list_directory_cmd(const char* pwd, struct ls_config* config) 
@@ -344,17 +361,9 @@ int list_directory_cmd(const char* pwd, struct ls_config* config)
   }
 
   //Sorting
-  switch(config->sort_by) {
-  case sort_by_nosort: break;
-  case sort_by_size:
-    qsort(files,num_entries,sizeof(struct fileinfo*), &fi_cmp_size);
-    break;
-  case sort_by_mtime:
-    qsort(files,num_entries,sizeof(struct fileinfo*), &fi_cmp_mtime);
-    break;
-  default:
-    qsort(files,num_entries,sizeof(struct fileinfo*), &fi_cmp_name);
-  }
+  sort_function_t sortfn = sort_function(config->sort_by);
+  if(sortfn)
+    qsort(files,num_entries,sizeof(struct fileinfo*), sortfn);
 
   if(config->sort_reverse) {
     struct fileinfo* tmp;
@@ -673,12 +682,40 @@ int fi_cmp_type(const void * i1, const void* i2)
 void print_usage_cmd(FILE* stream, int exit_code)
 {
   fprintf(stream,"Usage: %s  <options> [input file] \n",program_name);
+  struct description{
+    char* short_option;
+    char* long_option;
+    char* description;
+  };
+  
+  const struct description desc_arr[] = {
+    {"-a","--all","Display all including hidden files"},
+    {"-A","--almost-all","Display almost all files"},
+    {"-i",NULL,"Display inode numbers"},
+    {"-I[pat]","--ignore","Display ignore files by matching patterns"},
+    {"-l","--long","Display long list of file information"},
+    {"-v","--verbose","Print verbose output"},
+    {"-S","--sort-size","Sort by file size"},
+    {"-t",NULL,"Sort by file modification time"},
+    {"-B",NULL,"Filter out backup files"},
+    {"-r","--reverse","Reverse files in a directory"},
+    {"-h","--human-readable","Display file sizes in human readable format"},
+    {"-R","--recurse","Recursive directory listing "}
+  };
 
-  fprintf(stream,
-          "-h    --help    Display this usage information\n"
-          "-i              Display inode numbers\n"
-          "-l    --long    Display long list of information\n"
-          "-v    --verbose Print verbose output \n");
+  int i = 0;
+  for(i = 0 ; i < 11;i++) {
+    fprintf(stream,"%-10s",desc_arr[i].short_option);
+    if(!desc_arr[i].long_option)
+      fprintf(stream,"%-14s"," ");
+    else
+      fprintf(stream,"%-14s",desc_arr[i].long_option);
+
+    fprintf(stream,"\t");
+
+    fprintf(stream,"%-10s.",desc_arr[i].description);
+    fprintf(stream,"\n");
+  }
   exit(exit_code);
 }
 
