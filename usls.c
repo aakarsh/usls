@@ -479,7 +479,7 @@ void file_mode_string(mode_t md,char* str)
   if(md & S_IXOTH) str[8] ='x';    
 }
 
-void print_formatted_filename(struct fileinfo* fi,char* format);
+void print_formatted_filename(struct fileinfo* fi,char* format,bool show_link);
 
 void print_simple_fileinfo(struct print_config* pc, 
                            struct ls_config* config,
@@ -513,7 +513,7 @@ void print_simple_fileinfo(struct print_config* pc,
         printf("%7ld ",fi->stat->st_ino);
       char fmt[15];
       snprintf(fmt,15,"%%-%ds  ",col_widths[i%num_cols]);
-      print_formatted_filename(fi,fmt);
+      print_formatted_filename(fi,fmt,false);
       if((i+1)%num_cols==0 && i!=0){
         printf("\n");  
       }
@@ -571,12 +571,12 @@ void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi )
   char mod_time[100];
   strftime(mod_time,100,"%b %d %H:%M",localtime(&(fi->stat->st_mtime)));
   printf("%9s ",mod_time);
-  print_formatted_filename(fi,NULL);
+  print_formatted_filename(fi,NULL,true);
   printf("\n");
 
 }
 
-void print_formatted_filename(struct fileinfo* fi,char* format)
+void print_formatted_filename(struct fileinfo* fi,char* format,bool show_link)
 {  
   switch(fi->type) {
   case directory:
@@ -593,15 +593,16 @@ void print_formatted_filename(struct fileinfo* fi,char* format)
 
   if(S_ISLNK(fi->stat->st_mode)) {
     start_color(Dim, Blue, Default);
-    printf("%s -> %s",fi->name,fi->path);
+    if(show_link)
+      printf("%s -> %s",fi->name,fi->path);
+    else
+      printf("%s",fi->name);
     reset_color();
     return;
   }
-
   // hmm..
   if(format == NULL)
     format = "%s";
-
   printf(format,fi->name);
   reset_color();
 }
@@ -787,16 +788,28 @@ void usage(FILE* stream, int exit_code)
   exit(exit_code);
 }
 
+bool enable_colors()
+{
+  // no colrs for dumb terminals
+  if(isatty(fileno(stdout))) {
+    return true;
+  }
+  return false;
+}
 
 void start_color(enum term_text_type attr, enum term_colors fg, enum term_colors bg)
 {
-   char cmd[13];
-   sprintf(cmd, "%c[%d;%d;%dm", 0x1B, attr, fg + 30, bg + 40);
-   printf("%s",cmd);
+  if(!enable_colors())
+    return;
+  char cmd[13];
+  sprintf(cmd, "%c[%d;%d;%dm", 0x1B, attr, fg + 30, bg + 40);
+  printf("%s",cmd);
 }
 
 void reset_color() 
 {
+  if(!enable_colors())
+    return;
   const char* reset_code = "\033[0m";
   printf("%s",reset_code);
 }
