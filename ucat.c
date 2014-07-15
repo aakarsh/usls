@@ -44,11 +44,13 @@ int main(int argc,char * argv[]){
   struct config config;
   config_init(&config);
 
-  const char* short_options = "nbsTE";
+  const char* short_options = "hlnbsTE";
 
   const struct option long_options[] = {
     {"all",0,NULL,'a'},
+    {"help",0,NULL,'h'},
     {NULL,0,NULL,'n'},
+    {"show-numbers",0,NULL,'l'},
     {NULL,0,NULL,'b'},
     {"squeeze-blanks",0,NULL,'s'},
     {"show-ends",0,NULL,'E'},
@@ -56,13 +58,14 @@ int main(int argc,char * argv[]){
   };
 
   do{    
-    next_opt = getopt_long(argc,argv,
-                           short_options,long_options, NULL);
+    next_opt = getopt_long(argc,argv,short_options
+                           ,long_options, NULL);
     extern int optind;
     switch(next_opt){
     case 'h':
       print_usage_cmd(stdout,0);      
       break;
+    case 'l':
     case 'n':
       config.show_numbers = true;
       break;
@@ -87,10 +90,7 @@ int main(int argc,char * argv[]){
       printf("unexpected exit");
       abort();
     }
-  } while (next_opt != -1);  
-
-
-  
+  } while (next_opt != -1);    
   
   if(optind >= argc){
     cat_cmd(stdin,&config);    
@@ -108,6 +108,7 @@ int main(int argc,char * argv[]){
         perror("fopen");
         exit(1);
       }
+
       cat_cmd(str,&config);
 
       int err = fclose(str);
@@ -122,12 +123,12 @@ int main(int argc,char * argv[]){
 }
 
 int cat_cmd(FILE* stream, struct config * config){ 
-  int  LINE_LEN = 2048;
-  char line_buffer[LINE_LEN];
   int cnt = 1;
   bool last_line_empty = false;
-
-  while(fgets(line_buffer,LINE_LEN,stream) != NULL){
+  char* line_buffer = NULL;
+  size_t  n;
+  ssize_t ret = -1;
+  while((ret = getline(&line_buffer,&n,stream)) > 0 ) {
     int len =  strlen(line_buffer);
 
     if(config->show_numbers){
@@ -159,18 +160,48 @@ int cat_cmd(FILE* stream, struct config * config){
     if(config->show_ends){
       printf("$");
     }
-    printf("\n");
-    
+    printf("\n");    
+    fflush(stdout);
+
+    if(line_buffer)
+      free(line_buffer);
+
+    line_buffer = NULL;
     loop_end : ;
-  }      
+  } 
+
+  if(line_buffer)
+    free(line_buffer);
   return 0;
 }
 
 
 void print_usage_cmd(FILE* stream, int exit_code){
   fprintf(stream,"Usage: %s  <options> [input file] \n",program_name);
-  fprintf(stream,
-          "-h    --help    Display this usage information\n"
-          "-l    --long    Display long list of information\n");
+
+  struct description
+  {
+    char* shrt;
+    char* lng;
+    char* desc;
+  };
+
+  const struct description opts[] = {
+    {"-h","--help","Show this help message."},
+    {"-l ","--long","Display long list of information"},
+    {"-a ","--all","Dsiplay all"},
+    {"-n ","--show-numbers","Show cat with numbers"},
+    {"-s ","--squeeze_blanks","Show remove consequtive blank lines"},
+    {"-E ","--show-ends","Show end of file with $ marker."},
+    {"-T ","--show-tabs","Show tabs visually as ^I"}
+  };
+
+  int i = 0;
+  for(i =0; i < 2; i++) {
+    fprintf(stream,"%-10s%-14s\t%-10s\n"
+            ,opts[i].shrt
+            ,opts[i].lng
+            ,opts[i].desc);
+  }
   exit(exit_code);
 }
