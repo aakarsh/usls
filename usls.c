@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <linux/limits.h>
 #include <getopt.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -84,6 +85,7 @@ struct fileinfo
 struct print_config
 {
   int max_filename_len;
+  long total;
   int line_len;
   int num_files;
 };
@@ -93,6 +95,8 @@ static struct fileinfo* create_fileinfo(const char* dir_path,
 
 static void clear_fileinfo(struct fileinfo* fi);
 static void clear_fileinfos(struct fileinfo** fi,int n);
+
+static void print_files(struct ls_config* config, struct fileinfo** files, int num_entries);
 
 static void print_simple_fileinfo(struct print_config* pc, 
                                   struct ls_config* config,
@@ -288,6 +292,67 @@ sort_function_t sort_function(enum ls_sort_by sortby)
   return NULL;
 }
 
+long total_file_size(struct fileinfo** files, int num_entries)
+{
+  int i;
+  long  total =0;
+  for(i = 0; i < num_entries; i++) {
+    total += files[i]->stat->st_size;
+  }
+  total = total/1024;
+  return total;
+}
+
+int max_filename_length(struct fileinfo** files, int num_entries)
+{  
+  int i;
+  int max_filename_len = 0;
+  for(i =0;i<num_entries; i++){
+    int len = strlen(files[i]->name);
+    if(len > max_filename_len)
+      max_filename_len = len;
+  }  
+  return max_filename_len;
+}
+
+void print_files(struct ls_config* config, struct fileinfo** files, int num_entries)
+{
+
+  struct print_config pc;
+  pc.max_filename_len = max_filename_length(files,num_entries);
+
+  pc.line_len = 100;
+  pc.num_files = num_entries;
+
+  int i = 0;  
+
+  switch(config->listing_type){
+
+  case listing_type_long:        
+    printf("total %ld\n",total_file_size(files,num_entries));    
+
+    for( i =0 ; i < num_entries; i++) {
+      if(files[i]!=NULL){ // filtered files end up as null      
+        print_long_fileinfo(config,files[i]);
+        //        int is_dir = S_ISDIR(files[i]->stat->st_mode);
+        char* path = strdup(files[i]->path);
+        /**
+        if(is_dir && config->recurse){
+          printf("Recursing on path[%s]\n",path);
+          printf("%s:\n",path);
+          ls_cmd(path,config);
+        }
+        */
+        free(path);
+      }
+    }
+    break;
+  case listing_type_simple:        
+    print_simple_fileinfo(&pc,config,files);
+    break;
+  }
+}
+
 void sort_files (struct ls_config* config, struct fileinfo** files, int num_entries)
 {
   sort_function_t sortfn = sort_function(config->sort_by);
@@ -325,7 +390,7 @@ int ls_cmd(const char* pwd, struct ls_config* config)
   struct dirent * entry;  
   char* ignored_files [] ={".",".."};
   int nignored = 2;
-
+  
   while (NULL!= (entry = readdir(dir))) {    
 
     if(config->filter_type != filter_type_none) {
@@ -339,8 +404,7 @@ int ls_cmd(const char* pwd, struct ls_config* config)
       //Filter files all files starting with .
       if(config->filter_type != filter_type_almost_none && entry->d_name[0] == '.') {
           continue;
-      }
-      
+      }      
     }
 
     if(config->filter_backups && entry->d_name[strlen(entry->d_name)-1] == '~') {
@@ -365,68 +429,29 @@ int ls_cmd(const char* pwd, struct ls_config* config)
         return 1;
       } 
       files = p;
-    }    
+    } 
 
     struct fileinfo* fi = create_fileinfo(pwd,entry);    
+
     if(!fi){
       printf("error getting fileinfo for %s/%s \n",pwd,entry->d_name);
       num_entries++;
       goto outer_loop;
-    }    
+    }
     files[num_entries++] = fi;
 
   outer_loop:;
   }
 
+  
   //Sorting
   sort_files(config,files,num_entries);
 
-  struct print_config pc;
-  pc.max_filename_len = 0;
-
-  int i;
-  for(i =0;i<num_entries; i++){
-    int len = strlen(files[i]->name);
-    if(len > pc.max_filename_len)
-      pc.max_filename_len = len;
-  }
-  
-  pc.line_len = 100;
-  pc.num_files = num_entries;
-  
-  switch(config->listing_type){
-  case listing_type_long:    
-    // TODO this should be the size of the directory
-    printf("total %d\n",num_entries);
-
-    fflush(stdout);
-
-    for( i =0 ; i < num_entries; i++){
-      if(files[i]!=NULL){ // filtered files end up as null      
-        print_long_fileinfo(config,files[i]);
-        int is_dir = S_ISDIR(files[i]->stat->st_mode);
-        char* path = strdup(files[i]->path);
-
-        if(is_dir && config->recurse){
-          printf("Recursing on path[%s]\n",path);
-          printf("%s:\n",path);
-          ls_cmd(path,config);
-        }
-        free(path);
-      }
-    }
-    break;
-  case listing_type_simple:        
-    print_simple_fileinfo(&pc,config,files);
-    break;
-  }
+    
+  //print files
+  print_files(config,files,num_entries);
 
   clear_fileinfos(files,num_entries);
-  /* for(i=0 ; i< num_entries; i++) {
-   *   if(files[i]!=NULL)
-   *     clear_fileinfo(files[i]);        
-   * } */
-
   free(files);
   closedir(dir);
   return 0;
