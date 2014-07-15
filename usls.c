@@ -92,6 +92,7 @@ static struct fileinfo* create_fileinfo(const char* dir_path,
                                         struct dirent* entry);
 
 static void clear_fileinfo(struct fileinfo* fi);
+static void clear_fileinfos(struct fileinfo** fi,int n);
 
 static void print_simple_fileinfo(struct print_config* pc, 
                                   struct ls_config* config,
@@ -100,9 +101,9 @@ static void print_simple_fileinfo(struct print_config* pc,
 static void print_long_fileinfo(struct ls_config* config,
                                 struct fileinfo* fi );
 
-static void print_usage_cmd(FILE* stream, int exit_code);
+static void usage(FILE* stream, int exit_code);
 
-static int list_directory_cmd(const char* pwd, 
+static int ls_cmd(const char* pwd, 
                               struct ls_config* config);
 
 
@@ -247,7 +248,7 @@ int main(int argc,char * argv[])
       config.listing_type = listing_type_long;
       break;
     case '?': // user specified invalid option
-      print_usage_cmd(stderr,0);
+      usage(stderr,0);
     case -1:
       break;
     default:
@@ -266,7 +267,7 @@ int main(int argc,char * argv[])
   } else {
     strncpy(dir,argv[optind],PATH_MAX);
   } 
-  list_directory_cmd(dir,&config);
+  ls_cmd(dir,&config);
   return 0;
 }
 
@@ -287,12 +288,31 @@ sort_function_t sort_function(enum ls_sort_by sortby)
   return NULL;
 }
 
-int list_directory_cmd(const char* pwd, struct ls_config* config) 
+void sort_files (struct ls_config* config, struct fileinfo** files, int num_entries)
+{
+  sort_function_t sortfn = sort_function(config->sort_by);
+
+  if(sortfn)
+    qsort(files,num_entries,sizeof(struct fileinfo*), sortfn);
+
+  if(config->sort_reverse) {
+    struct fileinfo* tmp;
+    int i;
+    for(i=0; i < (num_entries+1)/2 ;i++){
+      tmp = files[i];
+      files[i] = files[num_entries-i];
+      files[num_entries-i]=tmp;
+    }
+  }  
+}
+
+int ls_cmd(const char* pwd, struct ls_config* config) 
 {
 
   DIR* dir = opendir(pwd);
   char err_no_dir[2048];
   snprintf(err_no_dir,2048,"opendir:No such directory [%s]",pwd);
+
   if(NULL == dir){
     perror(err_no_dir);
     return 1;
@@ -317,20 +337,17 @@ int list_directory_cmd(const char* pwd, struct ls_config* config)
       }
 
       //Filter files all files starting with .
-      if(config->filter_type != filter_type_almost_none ) {
-        if(entry->d_name[0] == '.'){
+      if(config->filter_type != filter_type_almost_none && entry->d_name[0] == '.') {
           continue;
-        }
       }
+      
     }
 
-    if(config->filter_backups){
-      if(entry->d_name[strlen(entry->d_name)-1] == '~'){
+    if(config->filter_backups && entry->d_name[strlen(entry->d_name)-1] == '~') {
         continue;
-      }
     }
 
-    if(config->ignored_patterns !=NULL){
+    if(config->ignored_patterns !=NULL) {
       struct ignore_pattern* i = NULL;
       for(i = config->ignored_patterns;i!=NULL; i=i->next){
         if(fnmatch(i->pattern,entry->d_name,FNM_PATHNAME) == 0){
@@ -339,7 +356,7 @@ int list_directory_cmd(const char* pwd, struct ls_config* config)
       }
     }
 
-    if(num_entries >= alloc_entries){
+    if (num_entries >= alloc_entries) {
       alloc_entries = alloc_entries*2;
       //TODO: fix heap corruption   
       struct fileinfo** p = realloc(files, alloc_entries* sizeof(struct fileinfo*));
@@ -362,20 +379,8 @@ int list_directory_cmd(const char* pwd, struct ls_config* config)
   }
 
   //Sorting
-  sort_function_t sortfn = sort_function(config->sort_by);
-  if(sortfn)
-    qsort(files,num_entries,sizeof(struct fileinfo*), sortfn);
+  sort_files(config,files,num_entries);
 
-  if(config->sort_reverse) {
-    struct fileinfo* tmp;
-    int i;
-    for(i=0; i < (num_entries+1)/2 ;i++){
-      tmp = files[i];
-      files[i] = files[num_entries-i];
-      files[num_entries-i]=tmp;
-    }
-  }
-  
   struct print_config pc;
   pc.max_filename_len = 0;
 
@@ -403,8 +408,9 @@ int list_directory_cmd(const char* pwd, struct ls_config* config)
         char* path = strdup(files[i]->path);
 
         if(is_dir && config->recurse){
+          printf("Recursing on path[%s]\n",path);
           printf("%s:\n",path);
-          list_directory_cmd(path,config);
+          ls_cmd(path,config);
         }
         free(path);
       }
@@ -412,13 +418,15 @@ int list_directory_cmd(const char* pwd, struct ls_config* config)
     break;
   case listing_type_simple:        
     print_simple_fileinfo(&pc,config,files);
-
     break;
   }
-  for(i=0 ; i< num_entries; i++) {
-    if(files[i]!=NULL)
-      clear_fileinfo(files[i]);        
-  }
+
+  clear_fileinfos(files,num_entries);
+  /* for(i=0 ; i< num_entries; i++) {
+   *   if(files[i]!=NULL)
+   *     clear_fileinfo(files[i]);        
+   * } */
+
   free(files);
   closedir(dir);
   return 0;
@@ -612,6 +620,15 @@ struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry)
   return fi;
 }
 
+void clear_fileinfos(struct fileinfo** files,int num_entries)
+{
+  int i;
+  for(i=0 ; i< num_entries; i++) {
+    if(files[i]!=NULL)
+      clear_fileinfo(files[i]);        
+  }  
+}
+
 void clear_fileinfo(struct fileinfo* fi)
 {
   if(fi) {
@@ -680,7 +697,7 @@ int fi_cmp_type(const void * i1, const void* i2)
   return (*fi1)->type > (*fi2)->type;
 }
 
-void print_usage_cmd(FILE* stream, int exit_code)
+void usage(FILE* stream, int exit_code)
 {
   fprintf(stream,"Usage: %s  <options> [input file] \n",program_name);
 

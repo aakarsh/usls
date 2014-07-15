@@ -36,7 +36,7 @@ struct config {
 void config_init(struct config * config){
 }
 
-void print_usage_cmd(FILE* stream, int exit_code);
+void usage(FILE* stream, int exit_code);
 void prompt(FILE* s);
 char* find_cmd(char* s);
 
@@ -78,10 +78,10 @@ int main(int argc,char * argv[])
     extern int optind;
     switch(next_opt){
     case 'h':
-      print_usage_cmd(stdout,0);      
+      usage(stdout,0);      
       break;
     case '?': // user specified invalid option
-      print_usage_cmd(stderr,1);
+      usage(stderr,1);
     case -1:
       break;
     default:
@@ -204,7 +204,7 @@ void prompt(FILE* s){
 }
 
 
-void print_usage_cmd(FILE* stream, int exit_code){
+void usage(FILE* stream, int exit_code){
   fprintf(stream,"Usage: %s  <options> [input file] \n",program_name);
   fprintf(stream,
           "-h    --help    Display this usage information\n"

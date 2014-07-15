@@ -33,8 +33,9 @@ void config_init(struct config * config){
   config->show_ends = false;
   config->squeeze_blanks = false;
 }
+
 int cat_cmd(FILE* stream, struct config * config);
-void print_usage_cmd(FILE* stream, int exit_code);
+void usage(FILE* stream, int exit_code);
 
 int main(int argc,char * argv[]){
 
@@ -63,7 +64,7 @@ int main(int argc,char * argv[]){
     extern int optind;
     switch(next_opt){
     case 'h':
-      print_usage_cmd(stdout,0);      
+      usage(stdout,0);      
       break;
     case 'l':
     case 'n':
@@ -83,7 +84,7 @@ int main(int argc,char * argv[]){
       config.squeeze_blanks = true;
       break;
     case '?': // user specified invalid option
-      print_usage_cmd(stderr,1);
+      usage(stderr,1);
     case -1:
       break;
     default:
@@ -106,7 +107,7 @@ int main(int argc,char * argv[]){
       if(!str){
         printf("Opening %s \n" ,file_name);
         perror("fopen");
-        exit(1);
+        exit(-1);
       }
 
       cat_cmd(str,&config);
@@ -115,7 +116,7 @@ int main(int argc,char * argv[]){
       if(err) {
         printf("Opening %s \n" ,file_name);
         perror("fclose");
-        exit(1);
+        exit(-1);
       }
     }
   }
@@ -176,7 +177,7 @@ int cat_cmd(FILE* stream, struct config * config){
 }
 
 
-void print_usage_cmd(FILE* stream, int exit_code){
+void usage(FILE* stream, int exit_code){
   fprintf(stream,"Usage: %s  <options> [input file] \n",program_name);
 
   struct description
@@ -188,7 +189,7 @@ void print_usage_cmd(FILE* stream, int exit_code){
 
   const struct description opts[] = {
     {"-h","--help","Show this help message."},
-    {"-l ","--long","Display long list of information"},
+    {"-l ","--show-numbers","Display numbers along side output"},
     {"-a ","--all","Dsiplay all"},
     {"-n ","--show-numbers","Show cat with numbers"},
     {"-s ","--squeeze_blanks","Show remove consequtive blank lines"},
@@ -203,5 +204,6 @@ void print_usage_cmd(FILE* stream, int exit_code){
             ,opts[i].lng
             ,opts[i].desc);
   }
+
   exit(exit_code);
 }

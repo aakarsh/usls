@@ -49,7 +49,7 @@ void config_init(struct config * config)
 }
 
 int wc_cmd(FILE* stream, struct config * config,struct wc_result* res);
-void print_usage_cmd(FILE* stream, int exit_code);
+void usage(FILE* stream, int exit_code);
 
 int main(int argc,char * argv[])
 {
@@ -75,7 +75,7 @@ int main(int argc,char * argv[])
     extern int optind;
     switch(next_opt){
     case 'h':
-      print_usage_cmd(stdout,0);      
+      usage(stdout,0);      
       break;
     case 'c':
       config.show_byte_counts = true;
@@ -93,7 +93,7 @@ int main(int argc,char * argv[])
       config.show_word_counts = true;
       break;      
     case '?': // user specified invalid option
-      print_usage_cmd(stderr,1);
+      usage(stderr,1);
     case -1:
       break;
     default:
@@ -156,7 +156,7 @@ int wc_cmd(FILE* stream, struct config * config,struct wc_result* res)
     if(c == '\n')
       res->line_count++;  
     
-    if(ws == black_state && !(isspace(c)) ){
+    if(ws == black_state && !isspace(c) ){
       res->word_count++;
       ws = word_state;
     } else if(ws == word_state && isspace(c)){
@@ -168,7 +168,7 @@ int wc_cmd(FILE* stream, struct config * config,struct wc_result* res)
 }
 
 
-void print_usage_cmd(FILE* stream, int exit_code)
+void usage(FILE* stream, int exit_code)
 {
   fprintf(stream,"Usage: %s  <options> [input file] \n",program_name);
 
