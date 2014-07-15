@@ -79,6 +79,7 @@ struct fileinfo
   char* path; // realpath
   char* suppied_path; 
   enum filetype type;
+  struct dirent * dentry;
   struct stat* stat;
 };
 
@@ -90,30 +91,51 @@ struct print_config
   int num_files;
 };
 
+static const int SCREEN_SIZE = 100;
+
 static struct fileinfo* create_fileinfo(const char* dir_path,
-                                        struct dirent* entry);
+                                          struct dirent* entry);
 
 static void clear_fileinfo(struct fileinfo* fi);
 static void clear_fileinfos(struct fileinfo** fi,int n);
 
-static void print_files(struct ls_config* config, struct fileinfo** files, int num_entries);
+typedef int (*sort_function_t)(const void *, const void *);
+
+static sort_function_t sort_function(enum ls_sort_by sortby);
+
+static void sort_files (struct ls_config* config, 
+                          struct fileinfo** files, 
+                          int num_entries);
+
+
+
+
+static void print_files(struct ls_config* config, 
+                          struct fileinfo** files, 
+                          int num_entries);
 
 static void print_simple_fileinfo(struct print_config* pc, 
                                   struct ls_config* config,
                                   struct fileinfo** fi);
 
+static void print_long_fileinfos(struct ls_config* config, 
+                                 struct fileinfo** files, 
+                                   int num_entries);
+
 static void print_long_fileinfo(struct ls_config* config,
-                                struct fileinfo* fi );
+                                  struct fileinfo* fi );
+
 
 static void usage(FILE* stream, int exit_code);
 
-static int ls_cmd(const char* pwd, 
-                              struct ls_config* config);
+static bool skip_file(struct ls_config* config, char* entry_name);
+
+static int ls_cmd(const char* pwd, struct ls_config* config);
 
 
-int fi_cmp_mtime(const void * i1, const void* i2);
-int fi_cmp_name(const void * i1, const void* i2);
-int fi_cmp_size(const void * i1, const void* i2);
+static int fi_cmp_mtime(const void * i1, const void* i2);
+static int fi_cmp_name(const void * i1, const void* i2);
+static int fi_cmp_size(const void * i1, const void* i2);
 
 enum term_text_type
 {
@@ -264,7 +286,7 @@ int main(int argc,char * argv[])
   char dir[PATH_MAX];
   if(optind >= argc) {
     char* done = (char*) getcwd(dir,PATH_MAX);
-    if(!done){
+    if(!done) {
       perror("getcwd");
       exit(1);
     }
@@ -272,10 +294,67 @@ int main(int argc,char * argv[])
     strncpy(dir,argv[optind],PATH_MAX);
   } 
   ls_cmd(dir,&config);
+  //TODO rethink recursion
   return 0;
 }
 
-typedef int (*sort_function_t)(const void *, const void *);
+int ls_cmd(const char* pwd, struct ls_config* config) 
+{
+
+  DIR* dir = opendir(pwd);
+  char err_no_dir[2048];
+  snprintf(err_no_dir,2048,"opendir:No such directory [%s]",pwd);
+
+  if(NULL == dir){
+    perror(err_no_dir);
+    return 1;
+  }
+
+  int num_entries = 0;
+  int alloc_entries = 100;
+
+  struct fileinfo** files = malloc(alloc_entries*sizeof(struct fileinfo *));
+  struct dirent * entry;  
+  
+  while (NULL!= (entry = readdir(dir))) {    
+
+    if(skip_file(config,entry->d_name)){
+      goto outer_loop;
+    }
+
+    if (num_entries >= alloc_entries) {
+      alloc_entries *=  2;
+      struct fileinfo** p = realloc (files , alloc_entries * sizeof(struct fileinfo*));
+      if(!p){
+        printf("Error in realloc \n");
+        return 1;
+      } 
+      files = p;
+    } 
+
+    struct fileinfo* fi = create_fileinfo(pwd,entry);    
+
+    if(!fi) {
+      printf("error getting fileinfo for %s/%s \n",pwd,entry->d_name);
+      num_entries++;
+      goto outer_loop;
+    }
+    files[num_entries++] = fi;
+
+  outer_loop: ;//)
+
+  }
+
+  sort_files(config,files,num_entries);    
+
+  print_files(config,files,num_entries);
+
+  clear_fileinfos(files,num_entries);
+
+  free(files);
+  closedir(dir);
+  return 0;
+}
 
 sort_function_t sort_function(enum ls_sort_by sortby)
 {
@@ -315,39 +394,20 @@ int max_filename_length(struct fileinfo** files, int num_entries)
   return max_filename_len;
 }
 
-void print_files(struct ls_config* config, struct fileinfo** files, int num_entries)
+static void print_files(struct ls_config* config, struct fileinfo** files, int num_entries)
 {
 
   struct print_config pc;
-  pc.max_filename_len = max_filename_length(files,num_entries);
-
-  pc.line_len = 100;
-  pc.num_files = num_entries;
-
-  int i = 0;  
 
   switch(config->listing_type){
-
   case listing_type_long:        
-    printf("total %ld\n",total_file_size(files,num_entries));    
-
-    for( i =0 ; i < num_entries; i++) {
-      if(files[i]!=NULL){ // filtered files end up as null      
-        print_long_fileinfo(config,files[i]);
-        //        int is_dir = S_ISDIR(files[i]->stat->st_mode);
-        char* path = strdup(files[i]->path);
-        /**
-        if(is_dir && config->recurse){
-          printf("Recursing on path[%s]\n",path);
-          printf("%s:\n",path);
-          ls_cmd(path,config);
-        }
-        */
-        free(path);
-      }
-    }
+    printf("total %ld\n",total_file_size(files,num_entries)); 
+    print_long_fileinfos(config,files,num_entries);
     break;
   case listing_type_simple:        
+    pc.max_filename_len = max_filename_length(files,num_entries);
+    pc.line_len = SCREEN_SIZE;
+    pc.num_files = num_entries;
     print_simple_fileinfo(&pc,config,files);
     break;
   }
@@ -371,117 +431,34 @@ void sort_files (struct ls_config* config, struct fileinfo** files, int num_entr
   }  
 }
 
-int ls_cmd(const char* pwd, struct ls_config* config) 
-{
-
-  DIR* dir = opendir(pwd);
-  char err_no_dir[2048];
-  snprintf(err_no_dir,2048,"opendir:No such directory [%s]",pwd);
-
-  if(NULL == dir){
-    perror(err_no_dir);
-    return 1;
-  }
-
-  int num_entries = 0;
-  int alloc_entries = 1;
-
-  struct fileinfo** files = malloc(alloc_entries*sizeof(struct fileinfo *));
-  struct dirent * entry;  
-  char* ignored_files [] ={".",".."};
-  int nignored = 2;
-  
-  while (NULL!= (entry = readdir(dir))) {    
-
-    if(config->filter_type != filter_type_none) {
-      int i = 0 ;
-      for(i=0;i< nignored; i++){
-        if(strcmp(entry->d_name,ignored_files[i]) == 0) {
-          goto outer_loop;
-        }
-      }
-
-      //Filter files all files starting with .
-      if(config->filter_type != filter_type_almost_none && entry->d_name[0] == '.') {
-          continue;
-      }      
-    }
-
-    if(config->filter_backups && entry->d_name[strlen(entry->d_name)-1] == '~') {
-        continue;
-    }
-
-    if(config->ignored_patterns !=NULL) {
-      struct ignore_pattern* i = NULL;
-      for(i = config->ignored_patterns;i!=NULL; i=i->next){
-        if(fnmatch(i->pattern,entry->d_name,FNM_PATHNAME) == 0){
-          goto outer_loop;
-        }
-      }
-    }
-
-    if (num_entries >= alloc_entries) {
-      alloc_entries = alloc_entries*2;
-      //TODO: fix heap corruption   
-      struct fileinfo** p = realloc(files, alloc_entries* sizeof(struct fileinfo*));
-      if(!p){
-        printf("Error in realloc \n");
-        return 1;
-      } 
-      files = p;
-    } 
-
-    struct fileinfo* fi = create_fileinfo(pwd,entry);    
-
-    if(!fi){
-      printf("error getting fileinfo for %s/%s \n",pwd,entry->d_name);
-      num_entries++;
-      goto outer_loop;
-    }
-    files[num_entries++] = fi;
-
-  outer_loop:;
-  }
-
-  
-  //Sorting
-  sort_files(config,files,num_entries);
-
-    
-  //print files
-  print_files(config,files,num_entries);
-
-  clear_fileinfos(files,num_entries);
-  free(files);
-  closedir(dir);
-  return 0;
-}
-
-void filetype_sdesc(char** s,enum filetype type)
+void filetype_sdesc(char** s,struct fileinfo* fi)
 {
   const char* desc;
-  switch(type){
-  case blockdev:
-    desc = "b";
+  switch(fi->dentry->d_type){
+  case DT_LNK:
+    desc= "l";
     break;
-  case chardev:
-    desc = "c";
+  case DT_BLK:
+    desc="b";
     break;
-  case normal:
-    desc = "-";
+  case DT_CHR:
+    desc="c";
     break;
-  case directory:
-    desc = "d";
+  case DT_REG:
+    desc ="-";
     break;
-  case fifo:
-    desc = "f";
+  case DT_DIR:
+    desc ="d";
     break;
-  case sock:
-    desc = "s";
+  case DT_FIFO:
+    desc ="f";
     break;
-  default:
-    desc = "-";
+  case DT_SOCK:
+    desc="s";
     break;    
+  default:
+    desc ="-";
+    break;
   }
   *s = strdup(desc);
 }
@@ -545,13 +522,24 @@ void print_simple_fileinfo(struct print_config* pc,
     printf("\n");
 }
 
+void print_long_fileinfos(struct ls_config* config, 
+                          struct fileinfo** files, int num_entries)  
+{
+  int i;
+  for( i =0 ; i < num_entries; i++) {
+    if(files[i]!=NULL){ // filtered files end up as null      
+      print_long_fileinfo(config,files[i]);
+    }
+  }
+}
+
 void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi )
 {
   if(config->display_inode_number)
     printf("%7ld ",fi->stat->st_ino);
 
   char* desc;
-  filetype_sdesc(&desc,fi->type);
+  filetype_sdesc(&desc,fi);
   printf("%1s",desc);
   free(desc);
 
@@ -585,6 +573,7 @@ void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi )
   printf("%9s ",mod_time);
   print_formatted_filename(fi,NULL);
   printf("\n");
+
 }
 
 void print_formatted_filename(struct fileinfo* fi,char* format)
@@ -640,6 +629,7 @@ struct fileinfo* create_fileinfo(const char* dir_path,struct dirent* entry)
     return NULL;
   }  
 
+  fi->dentry = entry;
   fi->stat = file_stat;
   fi->type = determine_filetype(entry->d_type);
   return fi;
@@ -669,6 +659,9 @@ enum filetype determine_filetype(unsigned char  d_type)
 {
   enum filetype ft;
   switch(d_type){
+  case DT_LNK:
+    ft = symbolic_link;
+    break;
   case DT_BLK:
     ft = blockdev;
     break;
@@ -693,6 +686,43 @@ enum filetype determine_filetype(unsigned char  d_type)
   }
   return ft;
 }
+
+/**
+ * Determine whether or not to skip file
+ */
+bool skip_file(struct ls_config* config, char* entry_name)
+{
+  char* ignored_files [] ={".",".."};
+  int nignored = 2;
+  if(config->filter_type != filter_type_none) {
+    int i = 0 ;
+    for(i=0;i< nignored; i++){
+      if(strcmp(entry_name,ignored_files[i]) == 0) {
+        return true;
+      }
+    }
+
+    //Filter files all files starting with .
+    if(config->filter_type != filter_type_almost_none && entry_name[0] == '.') {
+      return true;
+    }      
+  }
+
+  if(config->filter_backups && entry_name[strlen(entry_name)-1] == '~') {
+    return true;
+  }
+
+  if(config->ignored_patterns !=NULL) {
+    struct ignore_pattern* i = NULL;
+    for(i = config->ignored_patterns;i!=NULL; i=i->next){
+      if(fnmatch(i->pattern,entry_name,FNM_PATHNAME) == 0){
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 
 int fi_cmp_mtime(const void * i1, const void* i2)
 {
