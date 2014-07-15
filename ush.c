@@ -17,7 +17,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-#include "ush_parser.tab.c"
+#include "gen/ush_parser.tab.c"
 
 void yyerror(char *s)
 {
@@ -40,7 +40,8 @@ void print_usage_cmd(FILE* stream, int exit_code);
 void prompt(FILE* s);
 char* find_cmd(char* s);
 
-void clear_commands(struct simple_command** pcl){
+void clear_commands(struct simple_command** pcl)
+{
   struct simple_command *i = NULL,*next;
   for(i  = *pcl; i ; i = next) {
     free(i->value->value);

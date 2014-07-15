@@ -1,3 +1,4 @@
+/* -*- Mode: c; tab-width: 8; indent-tabs-mode: 1; c-basic-offset: 8; -*- */
 #include <unistd.h>
 #include <stdio.h>
 #include <assert.h>
@@ -31,13 +32,15 @@ struct wc_result {
   int word_count;  
 };
 
-void clear_result(struct wc_result* res){
+void clear_result(struct wc_result* res)
+{
   res->line_count = 0;
   res->byte_count = 0;
   res->word_count = 0;
 }
 
-void config_init(struct config * config){
+void config_init(struct config * config)
+{
   config->show_byte_counts = false;
   config->show_char_counts = false;
   config->show_line_counts = false;
@@ -48,10 +51,9 @@ void config_init(struct config * config){
 int wc_cmd(FILE* stream, struct config * config,struct wc_result* res);
 void print_usage_cmd(FILE* stream, int exit_code);
 
-int main(int argc,char * argv[]){
-
+int main(int argc,char * argv[])
+{
   program_name = argv[0];
-
   int next_opt = 0;
   struct config config;
   config_init(&config);
@@ -143,7 +145,8 @@ int main(int argc,char * argv[]){
   return 0;
 }
 
-int wc_cmd(FILE* stream, struct config * config,struct wc_result* res){ 
+int wc_cmd(FILE* stream, struct config * config,struct wc_result* res)
+{ 
   int char_res;
   enum word_state { word_state, black_state };  
   enum word_state ws = black_state;
@@ -165,10 +168,31 @@ int wc_cmd(FILE* stream, struct config * config,struct wc_result* res){
 }
 
 
-void print_usage_cmd(FILE* stream, int exit_code){
+void print_usage_cmd(FILE* stream, int exit_code)
+{
   fprintf(stream,"Usage: %s  <options> [input file] \n",program_name);
-  fprintf(stream,
-          "-h    --help    Display this usage information\n"
-          "-l    --long    Display long list of information\n");
+
+  struct description{
+    char* short_option;
+    char* long_option;
+    char* description;
+  };
+
+  const struct description desc_arr[] = {
+    {"-h","--help","Show this help message."},
+    {"-w","--words","Show word counts."},
+    {"-c","--bytes","Show byte counts"},
+    {"-m","--chars","Show char counts"},
+    {"-l","--lines","Show line counts"},
+    {"-L","--max-line-length","Show maximum line"},
+  };
+
+  int i = 0;
+  for(i = 0 ; i < 5;i++) {
+    fprintf(stream,"%-10s%-14s\t%-10s\n"
+            ,desc_arr[i].short_option
+            ,desc_arr[i].long_option
+            ,desc_arr[i].description);                
+  }
   exit(exit_code);
 }

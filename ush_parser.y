@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 extern FILE *yyin;
-void yyerror(char *s);
+extern void yyerror(char *s); 
 int yylex();
 
 

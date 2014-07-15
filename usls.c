@@ -1,3 +1,4 @@
+/* -*- Mode: c; tab-width: 8; indent-tabs-mode: 1; c-basic-offset: 8; -*- */
 #include <unistd.h>
 #include <stdio.h>
 #include <assert.h>
@@ -682,6 +683,7 @@ int fi_cmp_type(const void * i1, const void* i2)
 void print_usage_cmd(FILE* stream, int exit_code)
 {
   fprintf(stream,"Usage: %s  <options> [input file] \n",program_name);
+
   struct description{
     char* short_option;
     char* long_option;
@@ -691,13 +693,13 @@ void print_usage_cmd(FILE* stream, int exit_code)
   const struct description desc_arr[] = {
     {"-a","--all","Display all including hidden files"},
     {"-A","--almost-all","Display almost all files"},
-    {"-i",NULL,"Display inode numbers"},
+    {"-i","","Display inode numbers"},
     {"-I[pat]","--ignore","Display ignore files by matching patterns"},
     {"-l","--long","Display long list of file information"},
     {"-v","--verbose","Print verbose output"},
     {"-S","--sort-size","Sort by file size"},
-    {"-t",NULL,"Sort by file modification time"},
-    {"-B",NULL,"Filter out backup files"},
+    {"-t","","Sort by file modification time"},
+    {"-B","","Filter out backup files"},
     {"-r","--reverse","Reverse files in a directory"},
     {"-h","--human-readable","Display file sizes in human readable format"},
     {"-R","--recurse","Recursive directory listing "}
@@ -705,16 +707,10 @@ void print_usage_cmd(FILE* stream, int exit_code)
 
   int i = 0;
   for(i = 0 ; i < 11;i++) {
-    fprintf(stream,"%-10s",desc_arr[i].short_option);
-    if(!desc_arr[i].long_option)
-      fprintf(stream,"%-14s"," ");
-    else
-      fprintf(stream,"%-14s",desc_arr[i].long_option);
-
-    fprintf(stream,"\t");
-
-    fprintf(stream,"%-10s.",desc_arr[i].description);
-    fprintf(stream,"\n");
+    fprintf(stream,"%-10s%-14s\t%-10s\n"
+            ,desc_arr[i].short_option
+            ,desc_arr[i].long_option
+            ,desc_arr[i].description);                
   }
   exit(exit_code);
 }

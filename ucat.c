@@ -1,3 +1,4 @@
+/* -*- Mode: c; tab-width: 8; indent-tabs-mode: 1; c-basic-offset: 8; -*- */
 #include <unistd.h>
 #include <stdio.h>
 #include <assert.h>
