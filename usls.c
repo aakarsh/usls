@@ -547,7 +547,7 @@ void print_long_fileinfo(struct ls_config* config ,struct fileinfo* fi )
   file_mode_string(fi->stat->st_mode,mode_str);
   printf("%9s ",mode_str);
 
-  printf("%3d",fi->stat->st_nlink);
+  printf("%3d",(int)fi->stat->st_nlink);
 
   struct passwd* pw = getpwuid(fi->stat->st_uid);
   printf("%9s ",pw->pw_name);
