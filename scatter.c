@@ -30,6 +30,62 @@
 
 #define MAX_SEARCH_TERM_LEN 1024
 
+struct search_buffers_arg {
+    char* file_name;
+    char* search_term;
+    struct iovec* buffers;
+    int nbuffers;
+    int thread_index;
+};
+
+
+void* thread_search_buffers(void* arg)
+{
+   struct search_buffers_arg* targ  = (struct search_buffers_arg*) arg;
+   fprintf(stderr,"Started thread %d",targ->thread_index);
+
+   //int nbuffers = targ->nbuffers/thread_in
+   
+   for(int i = 0 ;i < targ->nbuffers;i++) {
+     if(i % targ->thread_index == 0) {	 
+     }
+   }
+}
+
+
+void search_buffers(const char* file_name,const char* search_term,
+		    struct iovec* buffers,int nbuffers)
+{
+  int i=0;
+  for(i = 0; i < nbuffers; i++){
+	void* index = memmem(buffers[i].iov_base,buffers[i].iov_len,
+		search_term,strlen(search_term));
+	
+      if(index != NULL){
+	int pos  = (index - buffers[i].iov_base );
+	int overall_pos = buffers[i].iov_len*i + pos;
+	char out[1024];
+	int remndr_bytes =(buffers[i].iov_base+buffers[i].iov_len) - index;
+	int nbytes = remndr_bytes > sizeof(out)-1 ? sizeof(out)-1 : remndr_bytes;
+
+	memcpy(&out,index, nbytes);
+	out[nbytes+1]='\0';
+
+	int k=0;
+	while(k < nbytes ){
+           if(out[k] == '\n' || out[k] == '\r'){
+             out[k]= '\0';
+	     break;
+           }
+	   k++;
+        }
+	
+	fprintf(stderr,"match: [%d]%s: %d: [%s]  \n", i,file_name,overall_pos,out);
+      }
+
+   }
+}
+
 int main(int argc,char * argv[])
 {
   int num_processors = 0 ;
@@ -62,8 +118,8 @@ int main(int argc,char * argv[])
    return -1;
   }
 
-  int nthreads = num_processors*2;
-  fprintf(stderr,"Creating %d threads to search for %s in %s file size %d\n",nthreads,argv[1],argv[2],(int)file_info.st_size);
+  int num_threads = num_processors*2;
+  fprintf(stderr,"Creating %d threads to search for %s in %s file size %d\n",num_threads,argv[1],argv[2],(int)file_info.st_size);
 
   #define IOVEC_LEN 4096
 
@@ -76,37 +132,17 @@ int main(int argc,char * argv[])
     buffers[i].iov_len = IOVEC_LEN;
   }
 
-  int bytes = readv(fd,buffers,iovecs_to_read);
-  fprintf(stderr,"Read %d bytes num iovecs %d \n",bytes,iovecs_to_read);
+  int total_bytes = file_info.st_size;  
+  int bytes_read = preadv(fd,buffers,iovecs_to_read,0);
+  fprintf(stderr,"Read %d bytes num iovecs %d \n",bytes_read,iovecs_to_read);
+  //  search_buffers(argv[2],argv[1],buffers,iovecs_to_read);
+  pthread_t tid[num_threads];
+  struct search_buffers_arg thread_args[num_threads];
 
-  for(i = 0; i < iovecs_to_read; i++){
-	void* index = memmem(buffers[i].iov_base,buffers[i].iov_len,
-		argv[1],strlen(argv[1]));
-	
-      if(index != NULL){
-	int pos  = (index - buffers[i].iov_base );
-	int overall_pos = buffers[i].iov_len*i + pos;
-	char out[1024];
-	int remndr_bytes =(buffers[i].iov_base+buffers[i].iov_len) - index;
-	int nbytes = remndr_bytes > sizeof(out)-1 ? sizeof(out)-1 : remndr_bytes;
-	//fprintf(stderr,"copy %d bytes \n",nbytes);
-	memcpy(&out,index, nbytes);
-	out[nbytes+1]='\0';
-
-	int k=0;
-	while(k < nbytes ){
-           if(out[k] == '\n' || out[k] == '\r'){
-             out[k]= '\0';
-	     break;
-           }
-	   k++;
-        }
-	
-	fprintf(stderr,"match: [%d]%s: %d: [%s]  \n", i,argv[2],overall_pos,out);
-      }
-
-   }
-
+  for(i = 0 ; i < num_threads; i++) {     
+     pthread_create(&tid[i],NULL,&thread_search_buffers,(void*)&thread_args[i]);
+  }
+  fprintf(stderr,"Done Creating %d threads ",num_threads);
 
   return 0;
 }

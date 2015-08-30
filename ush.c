@@ -19,6 +19,11 @@
 
 #include "gen/ush_parser.tab.c"
 
+/**
+ * Simple shell allows for experimental play ground for linux systems
+ * programming.
+ * 
+ */
 void yyerror(char *s)
 {
     fprintf(stderr, "%s\n", s);
@@ -143,6 +148,7 @@ int main(int argc,char * argv[])
         goto exit;
 
       }
+
       FILE* r_stream = NULL;
       if(i->redirect){
         fprintf(stderr,"entry\n");
