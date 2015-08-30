@@ -1,11 +1,16 @@
-CFLAGS= 
+CFLAGS=-std=gnu99  -D_GNU_SOURCE
 INCLUDE_FLAGS= -I. -Igen/
 
 
-all: uls ucat uwc ush
+all: uls ucat uwc ush scat
 
 uls: usls.c 
 	gcc $(CFLAGS) -g -Wall $(INCLUDE_FLAGS) -o bin/uls usls.c
+	cp bin/* ~/bin
+	global -u
+
+scat: scatter.c 
+	gcc $(CFLAGS)  -g -Wall $(INCLUDE_FLAGS)  -o bin/scat scatter.c -pthread -lm
 	cp bin/* ~/bin
 	global -u
 
