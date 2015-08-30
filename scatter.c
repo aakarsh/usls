@@ -1,4 +1,4 @@
-/* -*- Mode: c; tab-width: 8; indent-tabs-mode: 1; c-basic-offset: 8; -*- */
+/* -*- Mode: c; tab-width: 2; indent-tabs-mode: 1; c-basic-offset: 2; -*- */
 
 #include <math.h>
 #include <assert.h>
@@ -30,59 +30,268 @@
 
 
 #define MAX_SEARCH_TERM_LEN 1024
+#define IOVEC_LEN 4096
 
+struct iovec_list {
+    struct iovec* vec;
+    struct iovec_list *next;
+	  void* priv; // some cstom data;
+};
+
+struct iovec_list_head {
+	struct iovec_list* head;
+	int size;
+	pthread_cond_t nonempty_cv;
+	pthread_mutex_t lock;
+};
+
+struct iovec_list_head* free_list = NULL;
+
+// List of iovec's ready to be searched
+struct iovec_list_head* search_list = NULL;
+
+
+struct iovec_list_head* init_iovec_list_head(struct iovec_list_head** list) {
+	struct iovec_list_head* new_list =	(struct iovec_list_head*) malloc(sizeof(struct iovec_list_head));
+
+	if(list!=NULL){
+		*list = new_list;
+	}
+	(new_list)->head = NULL;
+	(new_list)->size = 0;
+	pthread_mutex_init(&(new_list)->lock, NULL);
+	pthread_cond_init(&(new_list)->nonempty_cv, NULL);
+
+	return new_list;
+	
+}
+/**
+ * Adds a free'ed iovec_list node back into the free_list
+ */
+void iovec_list_prepend(struct iovec_list_head* list , struct iovec_list* node) {
+	pthread_mutex_lock(&list->lock);
+	node->next = list->head;
+	list->head = node;
+	list->size +=1;
+	pthread_mutex_unlock(&list->lock);
+}
+
+/**
+ * Prepends
+ */
+void iovec_list_prepend_all(struct iovec_list_head* list , struct iovec* node, int nvecs) {
+	int i = 0;
+	pthread_mutex_lock(&list->lock);
+	struct iovec_list* prev = NULL;
+	struct iovec_list* head = NULL;
+	for(i = 0; i < nvecs; i++) {
+		struct iovec_list* list_node = malloc(sizeof(struct iovec_list));
+		list_node->vec = &node[i];
+		if(prev == NULL) {
+			head = list_node;
+		} else {
+			prev->next = list_node;
+		}
+		prev = list_node;
+	}
+	list->head = head;
+	list->size = list->size+ nvecs;
+	pthread_mutex_unlock(&list->lock);
+}
+
+//TODO need to wait for queue to get elements once exhausted
+// TODO use conditional waits
+struct iovec* iovec_list_take(struct iovec_list_head* list, int nbuffers){
+	int i = 0;
+	struct iovec * retval = NULL;
+	pthread_mutex_lock(&list->lock);
+	retval = malloc(nbuffers*sizeof(struct iovec));
+	struct iovec_list * cur = list->head;
+
+	while(i< nbuffers && cur!=NULL){
+		retval[i].iov_base = cur->vec->iov_base;
+		retval[i].iov_len = cur->vec->iov_len;
+		fprintf(stderr,"iovec_list_take:adding %d \n",retval[i].iov_len);
+
+		struct iovec_list * next = cur->next;
+		free(cur);
+		cur = next;
+		i++;
+	}
+	list->head = cur;
+	list->size = list->size-nbuffers;
+	pthread_mutex_unlock(&list->lock);
+	//assuming i can get nbuffers
+	return retval;
+}
+
+/** 
+ * Creates an iovec_list
+ */
+struct iovec_list_head* create_iovec_list(int nblks ,int block_size) {
+  int i;	
+	struct iovec_list_head* list_head = init_iovec_list_head(NULL);
+	list_head->size = nblks;
+
+	struct iovec_list* head = NULL; 
+	struct iovec_list* prev = NULL;
+
+  for( i = 0; i < nblks; i++) {
+		struct iovec_list* node = malloc(sizeof(struct iovec_list));
+		struct iovec* vec = malloc(sizeof(struct iovec));
+		vec->iov_base = malloc(block_size);
+		vec->iov_len = block_size;
+		
+		node->vec = vec;
+		node->next = NULL;
+
+		if(prev == NULL) { // head node
+			head = node;
+		} else {
+			prev->next = node;
+		}
+		prev = node;
+  }
+	
+	list_head->head = head;
+	return list_head;
+}
 
 
 void search_buffers(const char* file_name,const char* search_term,
-		    struct iovec* buffers,int nbuffers)
+										struct iovec* buffers,int nbuffers)
 {
   int i=0;
   for(i = 0; i < nbuffers; i++){
-	void* index = memmem(buffers[i].iov_base,buffers[i].iov_len,
-		search_term,strlen(search_term));
-	
-      if(index != NULL){
-	int pos  = (index - buffers[i].iov_base );
-	int overall_pos = buffers[i].iov_len*i + pos;
-	char out[1024];
-	int remndr_bytes =(buffers[i].iov_base+buffers[i].iov_len) - index;
-	int nbytes = remndr_bytes > sizeof(out)-1 ? sizeof(out)-1 : remndr_bytes;
+		void* index = memmem(buffers[i].iov_base,buffers[i].iov_len,
+												 search_term,strlen(search_term));
 
-	memcpy(&out,index, nbytes);
-	out[nbytes+1]='\0';
+		if(index != NULL){
+			int pos  = (index - buffers[i].iov_base );
+			int overall_pos = buffers[i].iov_len*i + pos;
+			char out[1024];
+			int remndr_bytes =(buffers[i].iov_base+buffers[i].iov_len) - index;
+			int nbytes = remndr_bytes > sizeof(out)-1 ? sizeof(out)-1 : remndr_bytes;
 
-	int k=0;
-	while(k < nbytes ){
-           if(out[k] == '\n' || out[k] == '\r'){
-             out[k]= '\0';
-	     break;
-           }
-	   k++;
-        }	
-	fprintf(stdout,"match: [%d]%s: %d: [%s]  \n", i,file_name,overall_pos,out);
-      }
-   }
+			memcpy(&out,index, nbytes);
+			out[nbytes+1]='\0';
+
+			int k=0;
+			while(k < nbytes ){
+				if(out[k] == '\n' || out[k] == '\r'){
+					out[k]= '\0';
+					break;
+				}
+				k++;
+			}	
+			fprintf(stdout,"match: [%d]%s: %d: [%s]  \n", i,file_name,overall_pos,out);
+		}
+	}
 }
 
 struct search_buffers_arg {
-    char* file_name;
-    char* search_term;
-    struct iovec* buffers;
-    int nbuffers;
-    int nthreads;
-    int thread_index;
+	char* file_name;
+	char* search_term;
+	struct iovec* buffers;
+	int nbuffers;
+	int nthreads;
+	int thread_index;
 	
 };
 
 void* thread_search_buffers(void* arg)
 {
-   struct search_buffers_arg* targ  = (struct search_buffers_arg*) arg;
-   fprintf(stderr,"Started thread %d\n",targ->thread_index);
-   int i = 0;
-   for(i=targ->thread_index; i < targ->nbuffers; i+= targ->nthreads){
-      search_buffers(targ->file_name,targ->search_term,&targ->buffers[i],1);
-   }      
-   return NULL;
+	struct search_buffers_arg* targ  = (struct search_buffers_arg*) arg;
+	fprintf(stderr,"Started thread %d\n",targ->thread_index);
+	int i = 0;
+	for(i=targ->thread_index; i < targ->nbuffers; i+= targ->nthreads){
+		search_buffers(targ->file_name,targ->search_term,&targ->buffers[i],1);
+	}      
+	return NULL;
+}
+
+/**
+ * Reads a file and appends it to the search list
+ */
+int search_list_add(char* file, struct iovec_list_head* search_list) {
+  int fd = open(file, O_RDONLY);
+  if(fd < 0){
+    fprintf(stderr,"Couldn't open file %s \n", file);
+    return -1;
+  }
+  struct stat file_info;
+
+  int ret = fstat(fd,&file_info);
+  if(ret){
+    fprintf(stderr,"Couldnt stat file %s %d \n",file,ret);
+    return -1;
+  }
+
+  int iovecs_to_read = (int)ceil((double)file_info.st_size/(1.0*IOVEC_LEN));
+	struct iovec * buffers =	iovec_list_take(free_list,iovecs_to_read);
+
+  int total_bytes = file_info.st_size;  
+	// gather all files blocks that can be read into buffers
+  int bytes_read = readv(fd,buffers,iovecs_to_read);
+
+
+  fprintf(stderr,"Read %d bytes num iovecs %d \n",bytes_read,iovecs_to_read);
+
+	return bytes_read;
+}
+
+
+int search_file(char* file, char* search_term,int num_threads) {
+
+  int fd = open(file, O_RDONLY);
+  if(fd < 0){
+    fprintf(stderr,"Couldn't open file %s \n", file);
+    return -1;
+  }
+
+
+  struct stat file_info;
+  int ret = fstat(fd,&file_info);
+  if(ret){
+    fprintf(stderr,"Couldnt stat file %s %d \n",file,ret);
+    return -1;
+  }	    
+
+  fprintf(stderr,"Creating %d threads to search for %s in %s file size %d\n",
+					num_threads,search_term,file,(int)file_info.st_size);
+
+  int iovecs_to_read = (int)ceil((double)file_info.st_size/(1.0*IOVEC_LEN));
+	struct iovec * buffers =	iovec_list_take(free_list,iovecs_to_read);
+
+  int total_bytes = file_info.st_size;  
+  int bytes_read = readv(fd,buffers,iovecs_to_read);
+	
+  fprintf(stderr,"Read %d bytes num iovecs %d \n",bytes_read,iovecs_to_read);
+
+  pthread_t tid[num_threads];
+  struct search_buffers_arg thread_args[num_threads];
+	int i;
+  for(i = 0 ; i < num_threads; i++) {     
+		thread_args[i].thread_index =i;
+		thread_args[i].file_name = file;
+		thread_args[i].search_term = search_term;
+		thread_args[i].buffers = buffers;
+		thread_args[i].nbuffers = iovecs_to_read;
+		thread_args[i].nthreads = num_threads;
+
+		pthread_create(&tid[i],NULL,&thread_search_buffers,(void*)&thread_args[i]);
+
+  }
+  
+  fprintf(stderr,"Done Creating %d threads \n",num_threads);
+
+  for(i = 0; i < num_threads; i++) {
+		pthread_join(tid[i],NULL);        
+  }
+
+  fprintf(stderr,"Finished running threads \n");
+
+	return 0;
 }
 
 int main(int argc,char * argv[])
@@ -99,64 +308,21 @@ int main(int argc,char * argv[])
     return -1;
   }
 
-  
-  int fd = open(argv[2], O_RDONLY);
-  if(fd < 0){
-    fprintf(stderr,"Couldn't open file %s \n", argv[2]);
-    return -1;
-  }
+	// create a free list 
+	free_list = create_iovec_list(1000,IOVEC_LEN);
 
-  struct stat file_info;
-  int ret = fstat(fd,&file_info);
-  if(ret){
-    fprintf(stderr,"Couldnt stat file %s %d \n",argv[2],ret);
-    return -1;
-  }	  
-  
+	// Initiazlie a search list
+	init_iovec_list_head(&search_list);
+	
   if((num_processors = sysconf(_SC_NPROCESSORS_ONLN)) < 0){
-   fprintf(stderr,"Couldnt get number of processors  %d \n",errno);
-   return -1;
+		fprintf(stderr,"Couldnt get number of processors  %d \n",errno);
+		return -1;
   }
 
   int num_threads = num_processors*2;
-  fprintf(stderr,"Creating %d threads to search for %s in %s file size %d\n",
-	  num_threads,argv[1],argv[2],(int)file_info.st_size);
+	
+	search_list_add(argv[2],search_list);
+	int ret = search_file(argv[2],argv[1],num_threads);
 
-  #define IOVEC_LEN 4096
-
-  int iovecs_to_read = (int)ceil((double)file_info.st_size/(1.0*IOVEC_LEN));
-  struct iovec buffers[iovecs_to_read];
-
-  int i = 0;
-  for( i = 0; i < iovecs_to_read; i++) {
-    buffers[i].iov_base = malloc(IOVEC_LEN);
-    buffers[i].iov_len = IOVEC_LEN;
-  }
-
-  int total_bytes = file_info.st_size;  
-  int bytes_read = preadv(fd,buffers,iovecs_to_read,0);
-
-  fprintf(stderr,"Read %d bytes num iovecs %d \n",bytes_read,iovecs_to_read);
-
-  pthread_t tid[num_threads];
-  struct search_buffers_arg thread_args[num_threads];
-
-  for(i = 0 ; i < num_threads; i++) {     
-     thread_args[i].thread_index =i;
-     thread_args[i].file_name = argv[2];
-     thread_args[i].search_term = argv[1];
-     thread_args[i].buffers = buffers;
-     thread_args[i].nbuffers = iovecs_to_read;
-     thread_args[i].nthreads = num_threads;
-
-     pthread_create(&tid[i],NULL,&thread_search_buffers,(void*)&thread_args[i]);
-  }
-  
-  fprintf(stderr,"Done Creating %d threads \n",num_threads);
-  for(i = 0; i < num_threads; i++) {
-     pthread_join(tid[i],NULL);        
-  }
-  fprintf(stderr,"Finished running threads \n");
-
-  return 0;
+  return ret;
 }
