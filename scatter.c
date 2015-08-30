@@ -1,4 +1,5 @@
 /* -*- Mode: c; tab-width: 8; indent-tabs-mode: 1; c-basic-offset: 8; -*- */
+
 #include <math.h>
 #include <assert.h>
 #include <dirent.h>
@@ -30,27 +31,6 @@
 
 #define MAX_SEARCH_TERM_LEN 1024
 
-struct search_buffers_arg {
-    char* file_name;
-    char* search_term;
-    struct iovec* buffers;
-    int nbuffers;
-    int thread_index;
-};
-
-
-void* thread_search_buffers(void* arg)
-{
-   struct search_buffers_arg* targ  = (struct search_buffers_arg*) arg;
-   fprintf(stderr,"Started thread %d",targ->thread_index);
-
-   //int nbuffers = targ->nbuffers/thread_in
-   
-   for(int i = 0 ;i < targ->nbuffers;i++) {
-     if(i % targ->thread_index == 0) {	 
-     }
-   }
-}
 
 
 void search_buffers(const char* file_name,const char* search_term,
@@ -78,12 +58,31 @@ void search_buffers(const char* file_name,const char* search_term,
 	     break;
            }
 	   k++;
-        }
-	
-	fprintf(stderr,"match: [%d]%s: %d: [%s]  \n", i,file_name,overall_pos,out);
+        }	
+	fprintf(stdout,"match: [%d]%s: %d: [%s]  \n", i,file_name,overall_pos,out);
       }
-
    }
+}
+
+struct search_buffers_arg {
+    char* file_name;
+    char* search_term;
+    struct iovec* buffers;
+    int nbuffers;
+    int nthreads;
+    int thread_index;
+	
+};
+
+void* thread_search_buffers(void* arg)
+{
+   struct search_buffers_arg* targ  = (struct search_buffers_arg*) arg;
+   fprintf(stderr,"Started thread %d\n",targ->thread_index);
+   int i = 0;
+   for(i=targ->thread_index; i < targ->nbuffers; i+= targ->nthreads){
+      search_buffers(targ->file_name,targ->search_term,&targ->buffers[i],1);
+   }      
+   return NULL;
 }
 
 int main(int argc,char * argv[])
@@ -100,6 +99,7 @@ int main(int argc,char * argv[])
     return -1;
   }
 
+  
   int fd = open(argv[2], O_RDONLY);
   if(fd < 0){
     fprintf(stderr,"Couldn't open file %s \n", argv[2]);
@@ -119,7 +119,8 @@ int main(int argc,char * argv[])
   }
 
   int num_threads = num_processors*2;
-  fprintf(stderr,"Creating %d threads to search for %s in %s file size %d\n",num_threads,argv[1],argv[2],(int)file_info.st_size);
+  fprintf(stderr,"Creating %d threads to search for %s in %s file size %d\n",
+	  num_threads,argv[1],argv[2],(int)file_info.st_size);
 
   #define IOVEC_LEN 4096
 
@@ -134,15 +135,28 @@ int main(int argc,char * argv[])
 
   int total_bytes = file_info.st_size;  
   int bytes_read = preadv(fd,buffers,iovecs_to_read,0);
+
   fprintf(stderr,"Read %d bytes num iovecs %d \n",bytes_read,iovecs_to_read);
-  //  search_buffers(argv[2],argv[1],buffers,iovecs_to_read);
+
   pthread_t tid[num_threads];
   struct search_buffers_arg thread_args[num_threads];
 
   for(i = 0 ; i < num_threads; i++) {     
+     thread_args[i].thread_index =i;
+     thread_args[i].file_name = argv[2];
+     thread_args[i].search_term = argv[1];
+     thread_args[i].buffers = buffers;
+     thread_args[i].nbuffers = iovecs_to_read;
+     thread_args[i].nthreads = num_threads;
+
      pthread_create(&tid[i],NULL,&thread_search_buffers,(void*)&thread_args[i]);
   }
-  fprintf(stderr,"Done Creating %d threads ",num_threads);
+  
+  fprintf(stderr,"Done Creating %d threads \n",num_threads);
+  for(i = 0; i < num_threads; i++) {
+     pthread_join(tid[i],NULL);        
+  }
+  fprintf(stderr,"Finished running threads \n");
 
   return 0;
 }
