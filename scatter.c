@@ -42,6 +42,7 @@ struct iovec_list_head {
 	struct iovec_list* head;
 	int size;
 	pthread_cond_t nonempty_cv;
+	pthread_mutex_t nonempty_mutex;
 	pthread_mutex_t lock;
 };
 
@@ -49,6 +50,8 @@ struct iovec_list_head* free_list = NULL;
 
 // List of iovec's ready to be searched
 struct iovec_list_head* search_list = NULL;
+
+int search_list_add(char* file, struct iovec_list_head* search_list);
 
 
 struct iovec_list_head* init_iovec_list_head(struct iovec_list_head** list) {
@@ -61,7 +64,7 @@ struct iovec_list_head* init_iovec_list_head(struct iovec_list_head** list) {
 	(new_list)->size = 0;
 	pthread_mutex_init(&(new_list)->lock, NULL);
 	pthread_cond_init(&(new_list)->nonempty_cv, NULL);
-
+	pthread_mutex_init(&(new_list)->nonempty_mutex, NULL);
 	return new_list;
 	
 }
@@ -73,6 +76,7 @@ void iovec_list_prepend(struct iovec_list_head* list , struct iovec_list* node) 
 	node->next = list->head;
 	list->head = node;
 	list->size +=1;
+	pthread_cond_signal(&list->nonempty_cv);
 	pthread_mutex_unlock(&list->lock);
 }
 
@@ -95,8 +99,35 @@ void iovec_list_prepend_all(struct iovec_list_head* list , struct iovec* node, i
 		prev = list_node;
 	}
 	list->head = head;
+
 	list->size = list->size+ nvecs;
+	pthread_cond_signal(&list->nonempty_cv);
 	pthread_mutex_unlock(&list->lock);
+}
+
+struct iovec* iovec_list_take_one(struct iovec_list_head* list){
+	struct iovec * retval = NULL;
+	retval = malloc(sizeof(struct iovec));
+	pthread_mutex_lock(&list->nonempty_mutex);
+	while ((list->size) <= 0) {
+		pthread_cond_wait (&list->nonempty_cv, &list->nonempty_mutex);
+	}
+	// Acquire the list lock knowing the flag is set
+	pthread_mutex_lock(&list->lock);
+
+	// Free the condistional variable mutex
+	pthread_mutex_unlock(&list->nonempty_mutex);
+
+	struct iovec_list * cur = list->head;
+	retval->iov_base = cur->vec->iov_base;
+	retval->iov_len = cur->vec->iov_len;
+
+	struct iovec_list * next = cur->next;
+	free(cur);
+	list->head = next;
+	list->size = list->size-1;
+	pthread_mutex_unlock(&list->lock);
+	return retval;
 }
 
 //TODO need to wait for queue to get elements once exhausted
@@ -105,6 +136,8 @@ struct iovec* iovec_list_take(struct iovec_list_head* list, int nbuffers){
 	int i = 0;
 	struct iovec * retval = NULL;
 	pthread_mutex_lock(&list->lock);
+
+
 	retval = malloc(nbuffers*sizeof(struct iovec));
 	struct iovec_list * cur = list->head;
 
@@ -199,6 +232,21 @@ struct search_buffers_arg {
 	
 };
 
+struct file_reader_thread_args {
+	char* file;
+	struct iovec_list_head* search_list;
+};
+
+
+
+void* file_reader_thread_start(void* arg){
+	struct file_reader_thread_args* targ  = (struct file_reader_thread_args*) arg;
+	search_list_add(targ->file,targ->search_list);
+  return NULL;
+}
+
+
+
 void* thread_search_buffers(void* arg)
 {
 	struct search_buffers_arg* targ  = (struct search_buffers_arg*) arg;
@@ -239,6 +287,9 @@ int search_list_add(char* file, struct iovec_list_head* search_list) {
 
 	return bytes_read;
 }
+
+
+
 
 
 int search_file(char* file, char* search_term,int num_threads) {
@@ -311,6 +362,12 @@ int main(int argc,char * argv[])
 	// create a free list 
 	free_list = create_iovec_list(1000,IOVEC_LEN);
 
+	printf("before  take one\n");
+	int j;
+	for(j = 0; j < 10; j++)
+		iovec_list_take_one(free_list);
+	printf("after  take one\n");
+
 	// Initiazlie a search list
 	init_iovec_list_head(&search_list);
 	
@@ -321,8 +378,24 @@ int main(int argc,char * argv[])
 
   int num_threads = num_processors*2;
 	
-	search_list_add(argv[2],search_list);
-	int ret = search_file(argv[2],argv[1],num_threads);
+	// start and run thread which will read from file and add to the search thread.
+  pthread_t reader_id;
+	struct file_reader_thread_args reader_args;
+	reader_args.file = argv[2];
+	reader_args.search_list = search_list;
+	pthread_create(&reader_id,NULL,&file_reader_thread_start,(void*)&reader_args);
+
+	int ret =  0;
+
+	//	ret = search_file(argv[2],argv[1],num_threads);
+
+	//wait for reader
+	pthread_join(reader_id,NULL);        
+  /**
+	 * Once reader has ended we need to go ahead and cancel on searcher threads
+	 * which are waiting for data.
+	 */
+  fprintf(stderr, "Finished running reader \n");
 
   return ret;
 }
