@@ -235,7 +235,7 @@ void search_buffer (int thread_id,const char* file_name, const char* search_term
 		k++;
 	}	
 
-	fprintf(stdout,"[tid %d ] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,overall_pos,out);
+	fprintf(stdout,"[T:%d] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,overall_pos,out);
 }
 
 
