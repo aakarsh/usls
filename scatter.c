@@ -162,6 +162,7 @@ void* queue_take(struct queue_head* queue, int n){
 	// TODO SEGMENTATION VIOLATION
   int first_size = cur->data_len;
   void* retval = malloc(n*first_size); // assign a block
+
   while(i < n && cur!=NULL) { // what about the previous cur check
 
     int item_size = cur->data_len;
@@ -243,41 +244,7 @@ void search_buffer (int thread_id,const char* file_name, const char* search_term
 }
 
 
-void search_buffers(const char* file_name,const char* search_term,
-                    struct iovec* buffers,int nbuffers)
-{
-  int i=0;
-  for(i = 0; i < nbuffers; i++){
-    void* index = memmem(buffers[i].iov_base,buffers[i].iov_len,
-                         search_term,strlen(search_term));
-
-    if(index != NULL){
-      int pos  = (index - buffers[i].iov_base );
-      int overall_pos = buffers[i].iov_len*i + pos;
-      char out[1024];
-      int remndr_bytes =(buffers[i].iov_base+buffers[i].iov_len) - index;
-      int nbytes = remndr_bytes > sizeof(out)-1 ? sizeof(out)-1 : remndr_bytes;
-
-      memcpy(&out,index, nbytes);
-      out[nbytes+1]='\0';
-
-      int k=0;
-      while(k < nbytes ){
-        if(out[k] == '\n' || out[k] == '\r'){
-          out[k]= '\0';
-          break;
-        }
-        k++;
-      } 
-      fprintf(stdout,"match: [%d]%s: %d: [%s]  \n", i,file_name,overall_pos,out);
-    }
-  }
-}
-
-
-
 struct file_reader_thread_args {
-	//  char* file;  
 	int index ;
   struct queue_head* file_queue;
   struct queue_head* search_queue;
