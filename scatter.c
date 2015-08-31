@@ -32,6 +32,187 @@
 #define MAX_SEARCH_TERM_LEN 1024
 #define IOVEC_LEN 4096
 
+
+struct queue {
+  void* data; // your data
+	int data_len;
+	struct queue* next;
+};
+
+// Basic constructor
+struct queue* queue_create_node(void* data, int data_len) {
+	struct queue* node = malloc(sizeof(struct queue));
+	node->data = data;
+	node->data_len = data_len;
+	return node;	
+}
+
+struct queue_head{
+	struct queue* head;
+  int size;
+  int finish_filling;
+  pthread_cond_t modified_cv;
+  pthread_mutex_t modified_mutex;
+  pthread_mutex_t lock;
+};
+
+struct queue_head* queue_init(struct queue_head** list) {
+  struct queue_head* new_list =  (struct queue_head*) malloc(sizeof(struct queue_head));
+
+  if(list!=NULL){
+    *list = new_list;
+  }
+  (new_list)->head = NULL;
+  (new_list)->size = 0;
+  (new_list)->finish_filling = 0;
+
+  pthread_mutex_init(&(new_list)->lock, NULL);
+  pthread_cond_init(&(new_list)->modified_cv, NULL);
+  pthread_mutex_init(&(new_list)->modified_mutex, NULL);
+  return new_list;  
+}
+
+
+
+
+/**
+ * Mark the queue such that listeners know that there will be no new
+ * items.
+ */
+void queue_mark_finish_filling(struct queue_head* list){
+  pthread_mutex_lock(&list->lock);
+  list->finish_filling = 1;
+  pthread_cond_broadcast(&list->modified_cv);
+  pthread_mutex_unlock(&list->lock);
+}
+
+
+/**
+ * Adds a free'ed iovec_list node back into the free_list
+ */
+void queue_prepend(struct queue_head* list , struct queue* node) {
+  pthread_mutex_lock(&list->lock);
+  node->next = list->head;
+  list->head = node;
+  list->size +=1;
+  pthread_cond_signal(&list->modified_cv);
+  pthread_mutex_unlock(&list->lock);
+}
+
+
+
+
+/**
+ * Add array of iovecs to the given list
+ */
+void queue_prepend_all(struct queue_head* list , struct iovec* node, int nvecs) {
+
+	//Convert array to queue
+  struct queue* head = NULL;
+  struct queue* prev = NULL;
+
+  int i = 0;
+  for(i = 0; i < nvecs; i++) {
+
+    struct queue* list_node = malloc(sizeof(struct queue));
+    list_node->data = &node[i];
+		list_node->data_len = sizeof(struct iovec);
+
+    if(prev == NULL) {
+      head = list_node;
+    } else {
+      prev->next = list_node;
+    }
+    prev = list_node;
+  }
+
+	// Append new iovec list to list at its head
+  pthread_mutex_lock(&list->lock);
+	prev->next = list->head;
+  list->head = head;
+  list->size = list->size + nvecs;
+  pthread_cond_signal(&list->modified_cv);
+  pthread_mutex_unlock(&list->lock);
+}
+
+void* queue_take_one(struct queue_head* list){
+  void * retval = NULL;
+
+  pthread_mutex_lock(&list->modified_mutex);
+  while ((list->size) <= 0) {
+    if(!list->finish_filling) {
+      pthread_cond_wait (&list->modified_cv, &list->modified_mutex);
+    }
+    // woke up from sleep to find there is no more work to be done
+    // return poison packet
+    if(list->finish_filling) {
+      pthread_mutex_unlock(&list->modified_mutex);
+      return NULL;
+    }
+  }
+
+  // Acquire the list lock knowing the flag is set
+  pthread_mutex_lock(&list->lock);
+
+  // Free the condistional variable mutex
+  pthread_mutex_unlock(&list->modified_mutex);
+
+  struct queue * cur = list->head;
+	retval = cur->data;
+
+  struct queue * next = cur->next;
+  free(cur);
+  list->head = next;
+  list->size = list->size-1;
+  pthread_mutex_unlock(&list->lock);
+
+  return retval;
+}
+
+// TODO start of thinking we can take as many items as we want
+// package all data into linear array
+// also ssume that all items have univorm size
+void* queue_take(struct queue_head* queue, int n){
+  int i = 0;
+  pthread_mutex_lock(&queue->lock);
+  struct queue * cur = queue->head;
+
+	//assume equal sized items
+	int first_size = cur->data_len;
+  void* retval = malloc(n*first_size); // assign a block
+	while(i < n && cur!=NULL) { // what about the previous cur check
+
+		int item_size = cur->data_len;
+		memcpy(retval+(i*item_size),cur->data,item_size);
+
+    struct queue * next = cur->next;
+		free(cur);
+		cur = next;
+		i++;
+	}
+
+  queue->head = cur;
+  queue->size = queue->size - n;
+  pthread_mutex_unlock(&queue->lock);
+	return retval;
+}
+
+
+struct queue_head* create_iovec_queue(int nblks ,int block_size) {
+	struct queue_head* q = queue_init(NULL);
+	
+	int i;
+	for(i = 0 ; i < nblks;  i++) {
+		struct iovec* vec = malloc(sizeof(struct iovec));
+		vec->iov_base = malloc(block_size);
+		vec->iov_len = block_size;
+		struct queue * queue_node = queue_create_node(vec,sizeof(struct iovec));
+		queue_prepend(q,queue_node);
+	}
+	return q;	
+}
+
+
 struct iovec_list {
   struct iovec* vec;
   struct iovec_list *next;
@@ -47,10 +228,12 @@ struct iovec_list_head {
   pthread_mutex_t lock;
 };
 
-struct iovec_list_head* free_list = NULL;
+struct queue_head* free_iovec_queue = NULL;
 
 // List of iovec's ready to be searched
 struct iovec_list_head* search_list = NULL;
+
+struct queue_head* search_queue = NULL;
 
 int search_list_add(char* file, struct iovec_list_head* search_list);
 
@@ -101,10 +284,12 @@ void iovec_list_prepend(struct iovec_list_head* list , struct iovec_list* node) 
  * Add array of iovecs to the given list
  */
 void iovec_list_prepend_all(struct iovec_list_head* list , struct iovec* node, int nvecs) {
-  int i = 0;
-  pthread_mutex_lock(&list->lock);
-  struct iovec_list* prev = NULL;
+
+	//Convert array to iovec_list
   struct iovec_list* head = NULL;
+  struct iovec_list* prev = NULL;
+
+  int i = 0;
   for(i = 0; i < nvecs; i++) {
     struct iovec_list* list_node = malloc(sizeof(struct iovec_list));
     list_node->vec = &node[i];
@@ -115,11 +300,15 @@ void iovec_list_prepend_all(struct iovec_list_head* list , struct iovec* node, i
     }
     prev = list_node;
   }
-  list->head = head;
 
-  list->size = list->size+ nvecs;
+	// Append new iovec list to list at its head
+  pthread_mutex_lock(&list->lock);
+	prev->next = list->head;
+  list->head = head;
+  list->size = list->size + nvecs;
   pthread_cond_signal(&list->modified_cv);
   pthread_mutex_unlock(&list->lock);
+
 }
 
 
@@ -137,9 +326,7 @@ struct iovec* iovec_list_take_one(struct iovec_list_head* list){
       pthread_mutex_unlock(&list->modified_mutex);
       return NULL;
     }
-
   }
-
   // Acquire the list lock knowing the flag is set
   pthread_mutex_lock(&list->lock);
 
@@ -158,68 +345,6 @@ struct iovec* iovec_list_take_one(struct iovec_list_head* list){
   return retval;
 }
 
-// TODO need to wait for queue to get elements once exhausted
-// TODO use conditional waits
-struct iovec* iovec_list_take(struct iovec_list_head* list, int nbuffers){
-  int i = 0;
-  struct iovec * retval = NULL;
-  pthread_mutex_lock(&list->lock);
-
-  retval = malloc(nbuffers*sizeof(struct iovec));
-  struct iovec_list * cur = list->head;
-
-  while(i< nbuffers && cur!=NULL) {
-
-    retval[i].iov_base = cur->vec->iov_base;
-    retval[i].iov_len = cur->vec->iov_len;
-
-    //fprintf(stderr,"iovec_list_take:adding %d \n",retval[i].iov_len);
-
-    struct iovec_list * next = cur->next;
-
-    free(cur);
-    cur = next;
-    i++;
-  }
-  list->head = cur;
-  list->size = list->size-nbuffers;
-  pthread_mutex_unlock(&list->lock);
-  //assuming i can get nbuffers
-  return retval;
-}
-
-/** 
- * Creates an iovec_list
- */
-struct iovec_list_head* create_iovec_list(int nblks ,int block_size) {
-  int i;  
-  struct iovec_list_head* list_head = init_iovec_list_head(NULL);
-  list_head->size = nblks;
-
-  struct iovec_list* head = NULL; 
-  struct iovec_list* prev = NULL;
-
-  for( i = 0; i < nblks; i++) {
-
-    struct iovec_list* node = malloc(sizeof(struct iovec_list));
-    struct iovec* vec = malloc(sizeof(struct iovec));
-    vec->iov_base = malloc(block_size);
-    vec->iov_len = block_size;
-    
-    node->vec = vec;
-    node->next = NULL;
-
-    if(prev == NULL) { // head node
-      head = node;
-    } else {
-      prev->next = node;
-    }
-    prev = node;
-  }
-  
-  list_head->head = head;
-  return list_head;
-}
 
 void search_buffer (int thread_id,const char* file_name, const char* search_term, int buf_num, struct iovec* buffer)
 {
@@ -298,7 +423,6 @@ struct file_reader_thread_args {
 };
 
 
-
 void* file_reader_thread_start(void* arg){
   struct file_reader_thread_args* targ  = (struct file_reader_thread_args*) arg;
   search_list_add(targ->file,targ->search_list);
@@ -343,6 +467,9 @@ void* thread_search_buffers(void* arg)
 
 /**
  * Reads a file and appends it to the search list
+ * 
+ * TODO: Add buffers that have been searched back to the free list
+ * 
  */
 int search_list_add(char* file, struct iovec_list_head* search_list) {
   int fd = open(file, O_RDONLY);
@@ -359,13 +486,15 @@ int search_list_add(char* file, struct iovec_list_head* search_list) {
   }
 
   int iovecs_to_read = (int)ceil((double)file_info.st_size/(1.0*IOVEC_LEN));
-  struct iovec * buffers =  iovec_list_take(free_list,iovecs_to_read);
+
+	struct iovec*  buffers = (struct iovec*) queue_take(free_iovec_queue, iovecs_to_read);
 
   int total_bytes = file_info.st_size;  
   // gather all files blocks that can be read into buffers
   int bytes_read = readv(fd,buffers,iovecs_to_read);
 
-  iovec_list_prepend_all(search_list,buffers,iovecs_to_read);
+	iovec_list_prepend_all(search_list,buffers,iovecs_to_read);
+	
 
   fprintf(stderr,"Read %d bytes num iovecs %d \n",bytes_read,iovecs_to_read);
 
@@ -388,8 +517,8 @@ int main(int argc,char * argv[])
     return -1;
   }
 
-  // create a free list 
-  free_list = create_iovec_list(1000,IOVEC_LEN);
+
+	free_iovec_queue = create_iovec_queue(1000,IOVEC_LEN);
 
   // Initiazlie a search list
   init_iovec_list_head(&search_list);
