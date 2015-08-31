@@ -131,7 +131,7 @@ void* queue_take_one(struct queue_head* list){
     // woke up from sleep to find there is no more work to be done
     // return poison packet
     if(list->finish_filling) {
-			pthread_mutex_unlock(&list->lock);
+      pthread_mutex_unlock(&list->lock);
 
       return NULL;
     }
@@ -159,7 +159,7 @@ void* queue_take(struct queue_head* queue, int n){
 
   //Assumes a non empty queue when it actually should block waiting
   //for itemes like take one does
-	// TODO SEGMENTATION VIOLATION
+  // TODO SEGMENTATION VIOLATION
   int first_size = cur->data_len;
   void* retval = malloc(n*first_size); // assign a block
 
@@ -245,7 +245,7 @@ void search_buffer (int thread_id,const char* file_name, const char* search_term
 
 
 struct file_reader_thread_args {
-	int index ;
+  int index ;
   struct queue_head* file_queue;
   struct queue_head* search_queue;
 };
@@ -262,7 +262,7 @@ void* file_reader_thread_start(void* arg) {
       printf("Stopping reader %d end\n",targ->index);
       return NULL;
     } 
-		search_queue_add(file,targ->search_queue);
+    search_queue_add(file,targ->search_queue);
   }
 
   return NULL;
@@ -288,10 +288,10 @@ void* searcher_thread_start(void* arg){
     }   //    fprintf(stderr,"searcher %d found buffer! \n",targ->index);
     search_buffer(targ->index,"",targ->search_term,0,buffer);
 
-		// After we have finished searching we return this iovec back to 
-		// list free iovec 
-		struct queue* free_node =queue_create_node(buffer,sizeof(struct iovec));
-		queue_prepend(free_iovec_queue,free_node);
+    // After we have finished searching we return this iovec back to 
+    // list free iovec 
+    struct queue* free_node =queue_create_node(buffer,sizeof(struct iovec));
+    queue_prepend(free_iovec_queue,free_node);
   }
   
   return NULL;
@@ -329,7 +329,7 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
   queue_prepend_all(search_queue,buffers,iovecs_to_read); 
 
   fprintf(stderr,"Read file [%s] \n%d bytes num iovecs %d \n",file,bytes_read,iovecs_to_read);
-	close(fd);
+  close(fd);
 
   return bytes_read;
 }
@@ -356,8 +356,8 @@ int main(int argc,char * argv[])
 
   int num_threads = num_processors*2;
 
-	int num_readers = num_processors;
-	int num_searchers = num_processors;
+  int num_readers = num_processors;
+  int num_searchers = num_processors;
 
 
   // Initialize Free Queue
@@ -367,42 +367,42 @@ int main(int argc,char * argv[])
   search_queue = queue_init(NULL);
 
 
-	struct queue_head* file_queue = queue_init(NULL);
+  struct queue_head* file_queue = queue_init(NULL);
 
-	// add files to file_queue
-	if(strcmp(argv[2],"-") == 0) { // read a list of files from stdin
-		char* filename = NULL;
-		size_t sz = 1024;
-		while(getline(&filename,&sz,stdin) > 0 ) {			
-			int l = strlen(filename);
-			//	printf("file [%s] last char[%c]\n",filename,filename[l-1]);
-			//Remove new line
-			if(filename[l-1] == '\n') {
-				filename[l-1] = '\0';
-			}
-			char* f = strdup(filename);
-			int fl = strlen(f);
-			struct queue* node = queue_create_node(f,fl);
-			queue_prepend(file_queue,node);
-		}
-	} else{
-		struct queue* node = queue_create_node(argv[2],strlen(argv[2]));
-		queue_prepend(file_queue,node);
-	}
-	// we are done filling this queue
-	queue_mark_finish_filling(file_queue);
+  // add files to file_queue
+  if(strcmp(argv[2],"-") == 0) { // read a list of files from stdin
+    char* filename = NULL;
+    size_t sz = 1024;
+    while(getline(&filename,&sz,stdin) > 0 ) {      
+      int l = strlen(filename);
+      //  printf("file [%s] last char[%c]\n",filename,filename[l-1]);
+      //Remove new line
+      if(filename[l-1] == '\n') {
+        filename[l-1] = '\0';
+      }
+      char* f = strdup(filename);
+      int fl = strlen(f);
+      struct queue* node = queue_create_node(f,fl);
+      queue_prepend(file_queue,node);
+    }
+  } else{
+    struct queue* node = queue_create_node(argv[2],strlen(argv[2]));
+    queue_prepend(file_queue,node);
+  }
+  // we are done filling this queue
+  queue_mark_finish_filling(file_queue);
 
   // Start and run thread which will read from file and add data to search queue
   pthread_t reader_id[num_readers];
   struct file_reader_thread_args reader_args[num_readers];
-	//  reader_args.file = argv[2];
-	int i;
-	for(i = 0 ; i < num_readers; i++) {
-		reader_args[i].index = 0;
-		reader_args[i].search_queue = search_queue;
-		reader_args[i].file_queue = file_queue;
-		pthread_create(&reader_id[i],NULL,&file_reader_thread_start,(void*)&reader_args[i]);
-	}
+  //  reader_args.file = argv[2];
+  int i;
+  for(i = 0 ; i < num_readers; i++) {
+    reader_args[i].index = 0;
+    reader_args[i].search_queue = search_queue;
+    reader_args[i].file_queue = file_queue;
+    pthread_create(&reader_id[i],NULL,&file_reader_thread_start,(void*)&reader_args[i]);
+  }
 
   int ret =  0;
 
@@ -416,10 +416,10 @@ int main(int argc,char * argv[])
     pthread_create(&searcher_id[i],NULL,&searcher_thread_start,(void*)&(searcher_args[i]));
   }
   
-	fprintf(stderr,"Waiting for readers\n");
+  fprintf(stderr,"Waiting for readers\n");
   // Wait for reader
-	for(i = 0; i < num_readers;i++)
-		pthread_join(reader_id[i],NULL);     
+  for(i = 0; i < num_readers;i++)
+    pthread_join(reader_id[i],NULL);     
 
   /**
    * Once reader has ended we need to go ahead and cancel on searcher threads
@@ -429,7 +429,7 @@ int main(int argc,char * argv[])
 
   queue_mark_finish_filling(search_queue);
   
-	fprintf(stderr,"Waiting for searchers");
+  fprintf(stderr,"Waiting for searchers");
   // Wait for searchers to finsih pending work and die
   for(i = 0 ; i < num_threads; i++){
     pthread_join(searcher_id[i],NULL);
