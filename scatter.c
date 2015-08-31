@@ -28,7 +28,7 @@
 #include <unistd.h>
 #include <string.h>
 
-#define FREE_QUEUE_SIZE 5000
+#define FREE_QUEUE_SIZE 20000
 #define MAX_SEARCH_TERM_LEN 1024
 #define IOVEC_LEN 4096
 
@@ -145,10 +145,6 @@ void* queue_take(struct queue_head* queue, int n) {
 		}
 	}
 
-  //TODO:Assumes a non empty queue when it actually should block waiting
-  //for itemes like take one does
-  // TODO SEGMENTATION VIOLATION
-
   struct queue * cur = queue->head;	
   int first_size = cur->data_len;	
 
@@ -226,7 +222,7 @@ void search_buffer (int thread_id,const char* file_name, const char* search_term
   out[nbytes+1]='\0';
 
   int k=0;
-  while(k < nbytes ){
+  while(k < nbytes){
     if(out[k] == '\n' || out[k] == '\r'){
       out[k]= '\0';
       break;
