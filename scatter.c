@@ -190,6 +190,36 @@ struct iovec_list_head* create_iovec_list(int nblks ,int block_size) {
 	return list_head;
 }
 
+void search_buffer (const char* file_name, const char* search_term, int buf_num, struct iovec* buffer)
+{
+	void* index = memmem(buffer->iov_base,buffer->iov_len,
+											 search_term,strlen(search_term));
+	if(index == NULL){
+		return ;
+	}
+
+	int pos  = (index - buffer->iov_base );
+	int overall_pos = buffer->iov_len*buf_num + pos;
+	char out[1024];
+	int remndr_bytes =(buffer->iov_base+buffer->iov_len) - index;
+	int nbytes = remndr_bytes > sizeof(out)-1 ? sizeof(out)-1 : remndr_bytes;
+
+	memcpy(&out,index, nbytes);
+	out[nbytes+1]='\0';
+
+	int k=0;
+	while(k < nbytes ){
+		if(out[k] == '\n' || out[k] == '\r'){
+			out[k]= '\0';
+			break;
+		}
+		k++;
+	}	
+
+	fprintf(stdout,"match: [%d]%s: %d: [%s]  \n", buf_num,file_name,overall_pos,out);
+
+}
+
 
 void search_buffers(const char* file_name,const char* search_term,
 										struct iovec* buffers,int nbuffers)
@@ -246,6 +276,23 @@ void* file_reader_thread_start(void* arg){
 }
 
 
+struct searcher_thread_args { 
+	char* search_term;
+	struct iovec_list_head* search_list;
+	int index;
+};
+
+void* searcher_thread_start(void* arg){
+	struct searcher_thread_args* targ  = (struct searcher_thread_args*) arg;
+
+	fprintf(stderr,"searcher %d thread started! \n",targ->index);
+	while(1) {
+		struct iovec* buffer = iovec_list_take_one(targ->search_list);
+		fprintf(stderr,"searcher %d found buffer! \n",targ->index);
+		search_buffer("",targ->search_term,0,buffer);
+	}
+	return NULL;
+}
 
 void* thread_search_buffers(void* arg)
 {
@@ -283,13 +330,11 @@ int search_list_add(char* file, struct iovec_list_head* search_list) {
   int bytes_read = readv(fd,buffers,iovecs_to_read);
 
 
+	iovec_list_prepend_all(search_list,buffers,iovecs_to_read);
   fprintf(stderr,"Read %d bytes num iovecs %d \n",bytes_read,iovecs_to_read);
 
 	return bytes_read;
 }
-
-
-
 
 
 int search_file(char* file, char* search_term,int num_threads) {
@@ -389,13 +434,35 @@ int main(int argc,char * argv[])
 
 	//	ret = search_file(argv[2],argv[1],num_threads);
 
+
+  pthread_t searcher_id[4];
+	struct searcher_thread_args searcher_args[4];
+	int i = 0;
+	for(i = 0 ; i < num_threads; i++){
+		searcher_args[i].search_term = argv[1];
+		searcher_args[i].search_list = search_list;
+		searcher_args[i].index = i;
+		pthread_create(&searcher_id[i],NULL,&searcher_thread_start,(void*)&(searcher_args[i]));
+	}
+	
 	//wait for reader
 	pthread_join(reader_id,NULL);        
+
+
   /**
 	 * Once reader has ended we need to go ahead and cancel on searcher threads
 	 * which are waiting for data.
 	 */
   fprintf(stderr, "Finished running reader \n");
+
+	
+	//wait for searchers
+	for(i = 0 ; i < num_threads; i++){
+		pthread_join(searcher_id[i],NULL);
+	}
+
+
+
 
   return ret;
 }
