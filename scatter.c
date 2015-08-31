@@ -45,7 +45,6 @@ struct queue_head{
   int size;
   int finish_filling;
   pthread_cond_t modified_cv;
-  pthread_mutex_t modified_mutex;
   pthread_mutex_t lock;
 };
 
@@ -69,7 +68,7 @@ struct queue_head* queue_init(struct queue_head** list) {
 
   pthread_mutex_init(&(new_list)->lock, NULL);
   pthread_cond_init(&(new_list)->modified_cv, NULL);
-  pthread_mutex_init(&(new_list)->modified_mutex, NULL);
+
   return new_list;  
 }
 
@@ -124,27 +123,21 @@ void queue_prepend_all(struct queue_head* list , struct iovec* node, int nvecs) 
 void* queue_take_one(struct queue_head* list){
   void * retval = NULL;
 
-  pthread_mutex_lock(&list->modified_mutex);
+  pthread_mutex_lock(&list->lock);
   while ((list->size) <= 0) {
     if(!list->finish_filling) {
-      pthread_cond_wait (&list->modified_cv, &list->modified_mutex);
+      pthread_cond_wait (&list->modified_cv, &list->lock);
     }
     // woke up from sleep to find there is no more work to be done
     // return poison packet
     if(list->finish_filling) {
-      pthread_mutex_unlock(&list->modified_mutex);
+			pthread_mutex_unlock(&list->lock);
+
       return NULL;
     }
   }
 
-  // Acquire the list lock knowing the flag is set
-  pthread_mutex_lock(&list->lock);
-
-  // Free the condistional variable mutex
-  pthread_mutex_unlock(&list->modified_mutex);
-
   struct queue * cur = list->head;
-	// TODO SEGMENTATION VIOLATION
   retval = cur->data;
 
   struct queue * next = cur->next;
