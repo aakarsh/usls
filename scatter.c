@@ -327,16 +327,6 @@ void* searcher_thread_start(void* arg){
   return NULL;
 }
 
-void* thread_search_buffers(void* arg)
-{
-  struct search_buffers_arg* targ  = (struct search_buffers_arg*) arg;
-  fprintf(stderr,"Started thread %d\n",targ->thread_index);
-  int i = 0;
-  for(i=targ->thread_index; i < targ->nbuffers; i+= targ->nthreads){
-    search_buffers(targ->file_name,targ->search_term,&targ->buffers[i],1);
-  }      
-  return NULL;
-}
 
 /**
  * Reads a file and appends it to the search list
