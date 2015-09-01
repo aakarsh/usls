@@ -135,20 +135,20 @@ void* queue_take(struct queue_head* queue, int n) {
   pthread_mutex_lock(&queue->lock);
 
 
-	while((queue->size < n)) {
-		if(!queue->finish_filling) {
-			pthread_cond_wait(&queue->modified_cv,&queue->lock);
-		}
-		if(queue->finish_filling && queue->size < n) {
-			pthread_mutex_unlock(&queue->lock);
-			return NULL;
-		}
-	}
+  while((queue->size < n)) {
+    if(!queue->finish_filling) {
+      pthread_cond_wait(&queue->modified_cv,&queue->lock);
+    }
+    if(queue->finish_filling && queue->size < n) {
+      pthread_mutex_unlock(&queue->lock);
+      return NULL;
+    }
+  }
 
-  struct queue * cur = queue->head;	
-  int first_size = cur->data_len;	
+  struct queue * cur = queue->head; 
+  int first_size = cur->data_len; 
 
-	// Assumes items fit in n*first_size
+  // Assumes items fit in n*first_size
   void* retval = malloc(n*first_size);
 
   while(i < n && cur!=NULL) { // what about the previous cur check
@@ -204,16 +204,16 @@ int search_queue_add(char* file, struct queue_head* search_queue);
 //TODO this only find's a single instance ina  block
 // We need to find an instance in each line 
 void search_buffer (int thread_id, const char* file_name, 
-										const char* search_term, int buf_num, 
-										struct iovec* buffer)
+                    const char* search_term, int buf_num, 
+                    struct iovec* buffer)
 {
 
-	void* buf_base = buffer->iov_base;
-	int   buf_len = buffer->iov_len;
+  void* buf_base = buffer->iov_base;
+  int   buf_len = buffer->iov_len;
 
-	void* buf_end = buf_base + buf_len-1;
-	int   buf_end_pos = buf_len-1;
-	int   buf_file_pos = buffer->iov_len*buf_num;
+  void* buf_end = buf_base + buf_len-1;
+  int   buf_end_pos = buf_len-1;
+  int   buf_file_pos = buffer->iov_len*buf_num;
 
   void* match_idx = memmem(buf_base,buf_len,search_term,strlen(search_term));
 
@@ -221,48 +221,32 @@ void search_buffer (int thread_id, const char* file_name,
     return ;
   }
 
-	// Found a match
+  // Found a match
   int match_pos  =  (match_idx - buf_base );
 
-	//find end of line
-	int line_end_pos = buf_end_pos;
-	void* line_end = memchr(match_idx,'\n',buf_len-match_pos);
+  //find end of line
+  int line_end_pos = buf_end_pos;
+  void* line_end = memchr(match_idx,'\n',buf_len-match_pos);
 
-	if(line_end != NULL)
-		line_end_pos = line_end - buf_base -1;
+  if(line_end != NULL)
+    line_end_pos = line_end - buf_base -1;
 
-	//find beginning of line
-	int line_begin_pos = 0;
-	void* line_begin = memrchr(buf_base,'\n',match_pos-1);
+  //find beginning of line
+  int line_begin_pos = 0;
+  void* line_begin = memrchr(buf_base,'\n',match_pos-1);
 
-	if(line_begin!=NULL){ // no begining of line found
-		line_begin_pos = line_begin - buf_base+1;
-	}
-	int line_length = line_end_pos - line_begin_pos + 1;
+  if(line_begin!=NULL){ // no begining of line found
+    line_begin_pos = line_begin - buf_base+1;
+  }
+  int line_length = line_end_pos - line_begin_pos + 1;
 
   int file_pos =  buf_file_pos + match_pos;
-	//char out[1024];
 
-  //int remndr_bytes =(buf_base + buffer->iov_len) - match_idx;
-  //int nbytes = remndr_bytes > sizeof(out)-1 ? sizeof(out)-1 : remndr_bytes;	
-	//	int line_begin = (memrchr(match_idx,'\n',pos));
-	printf("search_buffers line [%p %p] [ %d -  %d] length %d\n",line_begin, line_end,line_begin_pos, line_end_pos, line_length);
-	fflush(stdout);
+  fprintf(stderr,"search_buffers line [%p %p] [ %d -  %d] length %d\n",line_begin, line_end,line_begin_pos, line_end_pos, line_length);
 
-	char out[line_length+1];
+  char out[line_length+1];
   memcpy(&out, buf_base+line_begin_pos, line_length);
-	out[line_length]='\0';
-	/**
-  out[nbytes+1]='\0';
-  int k=0;
-  while(k < nbytes){
-    if(out[k] == '\n' || out[k] == '\r'){
-      out[k]= '\0';
-      break;
-    }
-    k++;
-  } 
-	*/
+  out[line_length]='\0';
 
   fprintf(stdout,"[T:%d] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,file_pos,out);
 }
@@ -346,9 +330,9 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
   int iovecs_to_read = (int)ceil((double)total_bytes/(1.0*IOVEC_LEN));
 
   struct iovec*  buffers = (struct iovec*) queue_take(free_iovec_queue, iovecs_to_read);
-	if(buffers == NULL){		
-		return 0;
-	}
+  if(buffers == NULL){    
+    return 0;
+  }
 
   // gather all files blocks that can be read into buffers
   int bytes_read = readv(fd,buffers,iovecs_to_read);
@@ -384,7 +368,7 @@ int main(int argc,char * argv[])
   int num_threads = num_processors*2;
 
   int num_readers = num_processors;  
-	int num_searchers = num_processors;
+  int num_searchers = num_processors;
 
 
 
