@@ -203,24 +203,57 @@ int search_queue_add(char* file, struct queue_head* search_queue);
 
 //TODO this only find's a single instance ina  block
 // We need to find an instance in each line 
-void search_buffer (int thread_id,const char* file_name, const char* search_term, int buf_num, struct iovec* buffer)
+void search_buffer (int thread_id, const char* file_name, 
+										const char* search_term, int buf_num, 
+										struct iovec* buffer)
 {
 
-  void* index = memmem(buffer->iov_base,buffer->iov_len,
-                       search_term,strlen(search_term));
-  if(index == NULL){
+	void* buf_base = buffer->iov_base;
+	int   buf_len = buffer->iov_len;
+
+	void* buf_end = buf_base + buf_len-1;
+	int   buf_end_pos = buf_len-1;
+	int   buf_file_pos = buffer->iov_len*buf_num;
+
+  void* match_idx = memmem(buf_base,buf_len,search_term,strlen(search_term));
+
+  if(match_idx == NULL){
     return ;
   }
 
-  int pos  = (index - buffer->iov_base );
-  int overall_pos = buffer->iov_len*buf_num + pos;
-  char out[1024];
-  int remndr_bytes =(buffer->iov_base+buffer->iov_len) - index;
-  int nbytes = remndr_bytes > sizeof(out)-1 ? sizeof(out)-1 : remndr_bytes;	
-  memcpy(&out,index, nbytes);
+	// Found a match
+  int match_pos  =  (match_idx - buf_base );
 
+	//find end of line
+	int line_end_pos = buf_end_pos;
+	void* line_end = memchr(match_idx,'\n',buf_len-match_pos);
+
+	if(line_end != NULL)
+		line_end_pos = line_end - buf_base -1;
+
+	//find beginning of line
+	int line_begin_pos = 0;
+	void* line_begin = memrchr(buf_base,'\n',match_pos-1);
+
+	if(line_begin!=NULL){ // no begining of line found
+		line_begin_pos = line_begin - buf_base+1;
+	}
+	int line_length = line_end_pos - line_begin_pos + 1;
+
+  int file_pos =  buf_file_pos + match_pos;
+	//char out[1024];
+
+  //int remndr_bytes =(buf_base + buffer->iov_len) - match_idx;
+  //int nbytes = remndr_bytes > sizeof(out)-1 ? sizeof(out)-1 : remndr_bytes;	
+	//	int line_begin = (memrchr(match_idx,'\n',pos));
+	printf("search_buffers line [%p %p] [ %d -  %d] length %d\n",line_begin, line_end,line_begin_pos, line_end_pos, line_length);
+	fflush(stdout);
+
+	char out[line_length+1];
+  memcpy(&out, buf_base+line_begin_pos, line_length);
+	out[line_length]='\0';
+	/**
   out[nbytes+1]='\0';
-
   int k=0;
   while(k < nbytes){
     if(out[k] == '\n' || out[k] == '\r'){
@@ -229,8 +262,9 @@ void search_buffer (int thread_id,const char* file_name, const char* search_term
     }
     k++;
   } 
+	*/
 
-  fprintf(stdout,"[T:%d] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,overall_pos,out);
+  fprintf(stdout,"[T:%d] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,file_pos,out);
 }
 
 
@@ -349,8 +383,9 @@ int main(int argc,char * argv[])
 
   int num_threads = num_processors*2;
 
-  int num_readers = num_processors;
-  int num_searchers = num_processors;
+  int num_readers = num_processors;  
+	int num_searchers = num_processors;
+
 
 
   // Initialize Free Queue
@@ -399,10 +434,10 @@ int main(int argc,char * argv[])
 
   int ret =  0;
 
-  pthread_t searcher_id[num_threads];
-  struct searcher_thread_args searcher_args[num_threads];
+  pthread_t searcher_id[num_searchers];
+  struct searcher_thread_args searcher_args[num_searchers];
 
-  for(i = 0 ; i < num_threads; i++){
+  for(i = 0 ; i < num_searchers; i++){
     searcher_args[i].search_term = argv[1];
     searcher_args[i].search_queue = search_queue;
     searcher_args[i].index = i;
@@ -424,7 +459,7 @@ int main(int argc,char * argv[])
   
   fprintf(stderr,"Waiting for searchers");
   // Wait for searchers to finsih pending work and die
-  for(i = 0 ; i < num_threads; i++){
+  for(i = 0 ; i < num_searchers; i++){
     pthread_join(searcher_id[i],NULL);
   }
 
