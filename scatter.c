@@ -34,37 +34,14 @@
 #define MAX_SEARCH_TERM_LEN 1024
 #define IOVEC_LEN 4096
 
-/**
- * Add array of iovecs to the given list
- */
 void queue_prepend_all(struct queue_head* list , struct iovec* node, int nvecs) {
-
-  //Convert array to queue
-  struct queue* head = NULL;
-  struct queue* prev = NULL;
-
-  int i = 0;
-  for(i = 0; i < nvecs; i++) {
-
+	int i = 0;
+	for (i = 0 ; i < nvecs; i++) {
     struct queue* list_node = malloc(sizeof(struct queue));
     list_node->data = &node[i];
-    list_node->data_len = sizeof(struct iovec);
-
-    if(prev == NULL) {
-      head = list_node;
-    } else {
-      prev->next = list_node;
-    }
-    prev = list_node;
-  }
-
-  // Append new iovec list to list at its head
-  pthread_mutex_lock(&list->lock);
-  prev->next = list->head;
-  list->head = head;
-  list->size = list->size + nvecs;
-  pthread_cond_signal(&list->modified_cv);
-  pthread_mutex_unlock(&list->lock);
+    list_node->data_len = sizeof(struct iovec);		
+		queue_prepend(list,list_node);
+	}
 }
 
 struct queue_head* create_iovec_queue(int nblks ,int block_size) {
@@ -79,7 +56,6 @@ struct queue_head* create_iovec_queue(int nblks ,int block_size) {
   }
   return q; 
 }
-
 
 struct queue_head* free_iovec_queue = NULL;
 struct queue_head* search_queue = NULL;
