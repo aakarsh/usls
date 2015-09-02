@@ -201,8 +201,6 @@ struct queue_head* search_queue = NULL;
 
 int search_queue_add(char* file, struct queue_head* search_queue);
 
-//TODO this only find's a single instance ina  block
-// We need to find an instance in each line 
 void search_buffer (int thread_id, const char* file_name, 
                     const char* search_term, int buf_num, 
                     struct iovec* buffer)
@@ -211,53 +209,54 @@ void search_buffer (int thread_id, const char* file_name,
   void* buf_base = buffer->iov_base;
   int   buf_len = buffer->iov_len;
 
-	//  void* buf_end = buf_base + buf_len-1;
   int   buf_end_pos = buf_len-1;
   int   buf_file_pos = buffer->iov_len*buf_num;
-	
-	void* match_idx = NULL;
-	int offset = 0;
-	while ( offset < buf_end_pos
-				  && (match_idx = memmem(buf_base+offset,buf_len-offset,search_term,strlen(search_term)))!=NULL) {
+  
+  void* match_idx = NULL;
+  int offset = 0;
 
-		// Found a match
-		int match_pos  =  (match_idx - buf_base );
-		// offset right after match
-		offset = match_pos+1;
+  while ( offset < buf_end_pos
+          && (match_idx = memmem(buf_base+offset,buf_len-offset,search_term,strlen(search_term)))!=NULL) {
 
-		//find end of line
-		int line_end_pos = buf_end_pos;
-		void* line_end = memchr(match_idx,'\n',buf_len-match_pos);
+    // Found a match
+    int match_pos  =  (match_idx - buf_base );
+    // offset right after match
+    offset = match_pos+1;
 
-		if(line_end != NULL)
-			line_end_pos = line_end - buf_base -1;
+    //find end of line
+    int line_end_pos = buf_end_pos;
+    void* line_end = memchr(match_idx,'\n',buf_len-match_pos);
 
-		//find beginning of line
-		int line_begin_pos = 0;
-		void* line_begin = memrchr(buf_base,'\n',match_pos-1);
+    if(line_end != NULL)
+      line_end_pos = line_end - buf_base -1;
 
-		if(line_begin!=NULL){ // no begining of line found
-			line_begin_pos = line_begin - buf_base+1;
-		}
-		int line_length = line_end_pos - line_begin_pos + 1;
+    //find beginning of line
+    int line_begin_pos = 0;
+    void* line_begin = memrchr(buf_base,'\n',match_pos-1);
 
-		int file_pos =  buf_file_pos + match_pos;
+    if(line_begin!=NULL){ // no begining of line found
+      line_begin_pos = line_begin - buf_base+1;
+    }
+    int line_length = line_end_pos - line_begin_pos + 1;
 
-		if(line_length < 0) {
-			fprintf(stderr, "search_buffer WARNING negative line length  buffer length %d match_pos %d \n", buf_len, match_pos);
-		}
+    int file_pos =  buf_file_pos + match_pos;
 
-		fprintf(stderr,"search_buffers line [%p %p] [ %d -  %d] length %d\n"
-						,line_begin, line_end,
-						line_begin_pos, line_end_pos, line_length);
+    if(line_length < 0) {
+      fprintf(stderr, "search_buffer WARNING negative line length  buffer length %d match_pos %d \n", buf_len, match_pos);
+    }
+
+    fprintf(stderr,"search_buffers line [%p %p] [ %d -  %d] length %d\n"
+            ,line_begin, line_end,
+            line_begin_pos, line_end_pos, line_length);
 
 
-		char out[line_length+1];
-		memcpy(&out, buf_base+line_begin_pos, line_length);
-		out[line_length]='\0';
+    char out[line_length+1];
+    memcpy(&out, buf_base+line_begin_pos, line_length);
+    out[line_length]='\0';
 
-		fprintf(stdout,"[T:%d] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,file_pos,out);
-	}
+    fprintf(stdout,"[T:%d] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,file_pos,out);
+
+  }
 }
 
 
