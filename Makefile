@@ -9,8 +9,8 @@ uls: usls.c
 	cp bin/* ~/bin
 	global -u
 
-scat: scatter.c 
-	gcc $(CFLAGS)  -g -Wall $(INCLUDE_FLAGS)  -o bin/scat scatter.c -pthread -lm
+scat: scatter.c  queue.h queue.c
+	gcc $(CFLAGS)  -g -Wall $(INCLUDE_FLAGS)  -o bin/scat queue.c queue.h scatter.c  -pthread -lm
 	cp bin/* ~/bin
 	global -u
 
