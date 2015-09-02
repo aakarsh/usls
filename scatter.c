@@ -211,44 +211,53 @@ void search_buffer (int thread_id, const char* file_name,
   void* buf_base = buffer->iov_base;
   int   buf_len = buffer->iov_len;
 
-  void* buf_end = buf_base + buf_len-1;
+	//  void* buf_end = buf_base + buf_len-1;
   int   buf_end_pos = buf_len-1;
   int   buf_file_pos = buffer->iov_len*buf_num;
+	
+	void* match_idx = NULL;
+	int offset = 0;
+	while ( offset < buf_end_pos
+				  && (match_idx = memmem(buf_base+offset,buf_len-offset,search_term,strlen(search_term)))!=NULL) {
 
-  void* match_idx = memmem(buf_base,buf_len,search_term,strlen(search_term));
+		// Found a match
+		int match_pos  =  (match_idx - buf_base );
+		// offset right after match
+		offset = match_pos+1;
 
-  if(match_idx == NULL){
-    return ;
-  }
+		//find end of line
+		int line_end_pos = buf_end_pos;
+		void* line_end = memchr(match_idx,'\n',buf_len-match_pos);
 
-  // Found a match
-  int match_pos  =  (match_idx - buf_base );
+		if(line_end != NULL)
+			line_end_pos = line_end - buf_base -1;
 
-  //find end of line
-  int line_end_pos = buf_end_pos;
-  void* line_end = memchr(match_idx,'\n',buf_len-match_pos);
+		//find beginning of line
+		int line_begin_pos = 0;
+		void* line_begin = memrchr(buf_base,'\n',match_pos-1);
 
-  if(line_end != NULL)
-    line_end_pos = line_end - buf_base -1;
+		if(line_begin!=NULL){ // no begining of line found
+			line_begin_pos = line_begin - buf_base+1;
+		}
+		int line_length = line_end_pos - line_begin_pos + 1;
 
-  //find beginning of line
-  int line_begin_pos = 0;
-  void* line_begin = memrchr(buf_base,'\n',match_pos-1);
+		int file_pos =  buf_file_pos + match_pos;
 
-  if(line_begin!=NULL){ // no begining of line found
-    line_begin_pos = line_begin - buf_base+1;
-  }
-  int line_length = line_end_pos - line_begin_pos + 1;
+		if(line_length < 0) {
+			fprintf(stderr, "search_buffer WARNING negative line length  buffer length %d match_pos %d \n", buf_len, match_pos);
+		}
 
-  int file_pos =  buf_file_pos + match_pos;
+		fprintf(stderr,"search_buffers line [%p %p] [ %d -  %d] length %d\n"
+						,line_begin, line_end,
+						line_begin_pos, line_end_pos, line_length);
 
-  fprintf(stderr,"search_buffers line [%p %p] [ %d -  %d] length %d\n",line_begin, line_end,line_begin_pos, line_end_pos, line_length);
 
-  char out[line_length+1];
-  memcpy(&out, buf_base+line_begin_pos, line_length);
-  out[line_length]='\0';
+		char out[line_length+1];
+		memcpy(&out, buf_base+line_begin_pos, line_length);
+		out[line_length]='\0';
 
-  fprintf(stdout,"[T:%d] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,file_pos,out);
+		fprintf(stdout,"[T:%d] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,file_pos,out);
+	}
 }
 
 
@@ -267,12 +276,11 @@ void* file_reader_thread_start(void* arg) {
   while(1) {
     char* file = queue_take(targ->file_queue,1);
     if(file == NULL){ // done
-      printf("Stopping reader %d end\n",targ->index);
+      fprintf(stderr,"Stopping reader %d end\n",targ->index);
       return NULL;
     } 
     search_queue_add(file,targ->search_queue);
   }
-
   return NULL;
 }
 
@@ -291,14 +299,14 @@ void* searcher_thread_start(void* arg){
   while(1) {
     struct iovec* buffer = queue_take(targ->search_queue,1);
     if(buffer == NULL){ // done
-      printf("Stopping %d end\n",targ->index);
+      fprintf(stderr,"Stopping %d end\n",targ->index);
       return NULL;
     }   //    fprintf(stderr,"searcher %d found buffer! \n",targ->index);
     search_buffer(targ->index,"",targ->search_term,0,buffer);
 
     // After we have finished searching we return this iovec back to 
     // list free iovec 
-    struct queue* free_node =queue_create_node(buffer,sizeof(struct iovec));
+    struct queue* free_node = queue_create_node(buffer,sizeof(struct iovec));
     queue_prepend(free_iovec_queue,free_node);
   }
   
@@ -348,7 +356,7 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
 
 int main(int argc,char * argv[])
 {
-  int num_processors = 0 ;
+  int num_processors = 1;
 
   if(argc < 3) {
     fprintf(stderr, "Usage: %s [search_term] [file_name] \n",argv[0]);
@@ -364,8 +372,6 @@ int main(int argc,char * argv[])
     fprintf(stderr,"Couldnt get number of processors  %d \n",errno);
     return -1;
   }
-
-  int num_threads = num_processors*2;
 
   int num_readers = num_processors;  
   int num_searchers = num_processors;
