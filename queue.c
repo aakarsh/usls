@@ -69,6 +69,19 @@ void queue_prepend(struct queue_head* list , struct queue* node) {
   pthread_mutex_unlock(&list->lock);
 }
 
+void queue_prepend_one(struct queue_head* list , void* node, int node_sz) {
+  queue_prepend_all(list,node,node_sz,1);
+}
+
+void queue_prepend_all(struct queue_head* list , void* node, int node_sz,int n) {
+  int i = 0;
+  for (i = 0 ; i < n; i++) {
+    struct queue* list_node = malloc(sizeof(struct queue));
+    list_node->data = (node+ i*node_sz);
+    list_node->data_len = node_sz;		
+    queue_prepend(list,list_node);
+  }
+}
 
 /**
  * Mark the queue such that listeners know that there will be no new
