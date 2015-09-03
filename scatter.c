@@ -42,9 +42,10 @@ struct queue_head* free_iovec_queue = NULL;
 // List on which search is to conducted
 // Metadata of iovec we want to search
 struct search_queue_node {
-	char file_name[MAX_FILE_NAME]; 
-	int iovec_num;
-	struct iovec* vec;	
+  char file_name[MAX_FILE_NAME]; 
+  int file_name_len;
+  int iovec_num;
+  struct iovec* vec;  
 };
 
 struct queue_head* search_queue = NULL;
@@ -57,16 +58,17 @@ struct queue_head* create_iovec_queue(int nblks ,int block_size) {
   struct queue_head* q = queue_init(NULL);  
   int i;
 
-	// Create list of empty iovec's
-	struct search_queue_node* sqn = malloc(nblks*sizeof(struct search_queue_node));
-	struct iovec* vec = malloc(nblks*sizeof(struct iovec));
+  // Create list of empty iovec's
+  struct search_queue_node* sqn = malloc(nblks*sizeof(struct search_queue_node));
+  struct iovec* vec = malloc(nblks*sizeof(struct iovec));
   for(i = 0 ; i < nblks;  i++) {
     vec[i].iov_base = malloc(block_size);
     vec[i].iov_len = block_size;
-		sqn[i].vec = vec + i;
+    sqn[i].vec = vec + i;
   }
 
-	queue_prepend_all(q,sqn,sizeof(struct search_queue_node),nblks);
+  queue_prepend_all(q,sqn,sizeof(struct search_queue_node),nblks);
+
   return q; 
 }
 
@@ -106,7 +108,7 @@ void search_buffer (int thread_id, const char* file_name,
     if(line_begin!=NULL){ // no begining of line found
       line_begin_pos = line_begin - buf_base+1;
     }
-		
+    
     int line_length = line_end_pos - line_begin_pos + 1;
 
     int match_file_pos =  buf_file_pos + match_pos;
@@ -123,7 +125,8 @@ void search_buffer (int thread_id, const char* file_name,
     memcpy(&match_string, buf_base+line_begin_pos, line_length);
     match_string[line_length]='\0';
 
-		//    fprintf(stderr,"[T:%d] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,match_file_pos,match_string);
+    //fprintf(stderr,"[T:%d] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,match_file_pos,match_string);
+    //TODO seeing duplicates in results
     fprintf(stdout,"%s:%d:%s\n",file_name,match_file_pos,match_string);
 
   }
@@ -132,7 +135,7 @@ void search_buffer (int thread_id, const char* file_name,
 
 struct file_reader_thread_args {
   int index ;
-  struct queue_head* file_queue;
+  struct queue_head* in_queue;
   struct queue_head* search_queue;
 };
 
@@ -143,7 +146,7 @@ void* file_reader_thread_start(void* arg) {
   struct file_reader_thread_args* targ  = (struct file_reader_thread_args*) arg;
 
   while(1) {
-    char* file = queue_take(targ->file_queue,1);
+    char* file = queue_take(targ->in_queue,1);
     if(file == NULL){ // done
       fprintf(stderr,"Stopping reader %d end\n",targ->index);
       return NULL;
@@ -167,18 +170,18 @@ void* searcher_thread_start(void* arg){
 
   while(1) {
 
-		struct search_queue_node* sqn = queue_take(targ->search_queue,1);
+    struct search_queue_node* sqn = queue_take(targ->search_queue,1);
     if(sqn == NULL){ // done
       fprintf(stderr,"Stopping %d end\n",targ->index);
       return NULL;
     }
-		//		struct iovec* buffer = sqn->vec;
+    //    struct iovec* buffer = sqn->vec;
     search_buffer(targ->index,sqn->file_name,targ->search_term,sqn->iovec_num,sqn->vec);
 
     // After we have finished searching we return this iovec back to 
-    // list free iovec 
-		// free the search node;
-		//		free(sqn);
+    // For safety we make sure to zero out the data before returning to free list
+    memset(sqn->file_name, 0, MAX_FILE_NAME);
+    memset(sqn->vec->iov_base, 0, sqn->vec->iov_len);
     struct queue* free_node = queue_create_node(sqn,sizeof(struct search_queue_node));
     queue_prepend(free_iovec_queue,free_node);
 
@@ -212,22 +215,22 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
     return 0;
   }
 
-	struct iovec* buffers[iovecs_to_read];
-	int i = 0;
-	for(i = 0; i < iovecs_to_read; i++){
-		buffers[i] = sqn[i].vec;
-	}
+  struct iovec* buffers[iovecs_to_read];
+  int i = 0;
+  for(i = 0; i < iovecs_to_read; i++){
+    buffers[i] = sqn[i].vec;
+  }
 
   // gather all files blocks that can be read into buffers
   int bytes_read = readv(fd,*buffers,iovecs_to_read);
 
-	for(i = 0; i < iovecs_to_read; i++){
-		//		struct search_queue_node* node = malloc(sizeof(struct search_queue_node));
-		strncpy(sqn->file_name,file,MAX_FILE_NAME);
-		sqn->iovec_num = i;
-		sqn->vec = buffers[i];
-		queue_prepend_one(search_queue, sqn,sizeof(struct search_queue_node));		
-	}
+  for(i = 0; i < iovecs_to_read; i++){
+    strncpy(sqn->file_name,file,MAX_FILE_NAME);
+    sqn->file_name_len = strlen(file);
+    sqn->iovec_num = i;
+    sqn->vec = buffers[i];
+    queue_prepend_one(search_queue, sqn,sizeof(struct search_queue_node));    
+  }
   fprintf(stderr,"Read file [%s] \n%d bytes num iovecs %d \n",file,bytes_read,iovecs_to_read);
   close(fd);
 
@@ -295,7 +298,7 @@ int main(int argc,char * argv[])
   for(i = 0 ; i < num_readers; i++) {
     reader_args[i].index = 0;
     reader_args[i].search_queue = search_queue;
-    reader_args[i].file_queue = file_queue;
+    reader_args[i].in_queue = file_queue;
     pthread_create(&reader_id[i],NULL,&file_reader_thread_start,(void*)&reader_args[i]);
   }
 
