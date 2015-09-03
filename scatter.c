@@ -80,6 +80,7 @@ void search_buffer (int thread_id, const char* file_name,
                     struct iovec* buffer)
 {
 
+	fprintf(stderr,"search_buffer %d : %s %s %d \n",thread_id,file_name,search_term,buf_num);
   void* buf_base = buffer->iov_base;
   int   buf_len = buffer->iov_len;
 
@@ -165,6 +166,25 @@ struct searcher_thread_args {
   struct queue_head* search_queue;
   int index;
 };
+
+struct queue* search_transform_function(void* obj, int id,void* priv) {
+
+	struct search_queue_node* sqn = (struct search_queue_node*) obj;
+	char*  search_term = (char*) priv;
+	fprintf(stderr,"Call search_transform_function [%s] on file %s \n",
+					search_term,sqn->file_name);
+
+	search_buffer(id,sqn->file_name,search_term,sqn->iovec_num,sqn->vec);
+	// After we have finished searching we return this iovec back to 
+	// For safety we make sure to zero out the data before returning to free list
+	memset(sqn->file_name, 0, MAX_FILE_NAME);
+	memset(sqn->vec->iov_base, 0, sqn->vec->iov_len);
+	struct queue* free_node = queue_create_node(sqn,sizeof(struct search_queue_node));
+	fprintf(stderr,"Returning free node \n");
+
+	return free_node;
+}
+
 
 void* searcher_thread_start(void* arg){
   struct searcher_thread_args* targ  = (struct searcher_thread_args*) arg;
@@ -349,15 +369,12 @@ int main(int argc,char * argv[])
 
   int ret =  0;
 
-  pthread_t searcher_id[num_searchers];
-  struct searcher_thread_args searcher_args[num_searchers];
-
-  for(i = 0 ; i < num_searchers; i++){
-    searcher_args[i].search_term = argv[1];
-    searcher_args[i].search_queue = search_queue;
-    searcher_args[i].index = i;
-    pthread_create(&searcher_id[i],NULL,&searcher_thread_start,(void*)&(searcher_args[i]));
-  }
+	pthread_t* searcher_id = start_tranformers("searcher",
+																						 search_transform_function,
+																						 argv[1], /*search terim*/
+																						 search_queue,
+																						 free_iovec_queue,
+																						 num_searchers);
   
   fprintf(stderr,"Waiting for readers\n");
   // Wait for reader
@@ -373,10 +390,9 @@ int main(int argc,char * argv[])
   queue_mark_finish_filling(search_queue);
   
   fprintf(stderr,"Waiting for searchers");
+
   // Wait for searchers to finsih pending work and die
-  for(i = 0 ; i < num_searchers; i++){
-    pthread_join(searcher_id[i],NULL);
-  }
+	join_transformers(searcher_id,num_searchers);
 
   return ret;
 }

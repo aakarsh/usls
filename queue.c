@@ -59,13 +59,13 @@ struct queue_head* queue_init(struct queue_head** list) {
 /**
  * Adds a free'ed iovec_list node back into the free_list
  */
-void queue_prepend(struct queue_head* list , struct queue* node) {
-  pthread_mutex_lock(&list->lock);
-  node->next = list->head;
-  list->head = node;
-  list->size +=1;
-  pthread_cond_signal(&list->modified_cv);
-  pthread_mutex_unlock(&list->lock);
+void queue_prepend(struct queue_head* q , struct queue* node) {
+  pthread_mutex_lock(&q->lock);
+  node->next = q->head;
+  q->head = node;
+  q->size +=1;
+  pthread_cond_signal(&q->modified_cv);
+  pthread_mutex_unlock(&q->lock);
 }
 
 void queue_prepend_one(struct queue_head* list , void* node, int node_sz) {
@@ -138,4 +138,61 @@ void* queue_take(struct queue_head* queue, int n) {
   pthread_mutex_unlock(&queue->lock);
 
   return retval;
+}
+
+/**
+ * Simple function which will keep running until we receive a NULL
+ * item in the input queue.
+ *
+ * It will put into an output queue if such a queue has been specfied.
+ */
+void* run_queue_tranformer(void* arg) {
+
+  struct queue_transformer_arg* qarg = (struct queue_transformer_arg*) arg;
+
+  while(1) {
+    void* obj = queue_take(qarg->in_q,1);
+    if(obj == NULL) { // done
+      fprintf(stderr,"Stopping %s %d end\n",qarg->name,qarg->id);
+      return NULL;
+    }
+		fprintf(stderr,"Running  %s:%d \n",qarg->name,qarg->id);
+    struct queue* node = qarg->transform(obj,qarg->id,qarg->priv);	
+		if(node!=NULL && qarg->out_q !=NULL)
+			queue_prepend(qarg->out_q, node);
+	}  
+
+  return NULL;
+}
+
+
+/**
+ * Starts n threads which will work take items from input queue and
+ * move to output queue after performing a transform
+ */
+pthread_t* start_tranformers(char* name,
+														 queue_transformer transform,void* priv, 
+														 struct queue_head* in_q, 
+														 struct queue_head* out_q, 
+														 int n){
+
+  pthread_t* transformer_id = malloc(sizeof(pthread_t)* n);
+  struct queue_transformer_arg args[n];
+  int i;
+  for(i = 0 ; i < n; i++) {
+		strncpy(args[i].name,name,20);
+    args[i].id = i;
+    args[i].in_q = in_q;
+    args[i].out_q = out_q;
+		args[i].transform = transform;
+		args[i].priv = priv;
+    pthread_create(&transformer_id[i],NULL,&run_queue_tranformer,(void*)&args[i]);
+  }
+	return transformer_id;
+}
+
+void join_transformers(pthread_t* id , int n) {
+	int i;
+  for(i = 0; i < n;i++)
+    pthread_join(id[i],NULL);     
 }
