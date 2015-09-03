@@ -30,14 +30,23 @@
 
 #include "queue.h" 
 
-#define FREE_QUEUE_SIZE 60000
+#define FREE_QUEUE_SIZE 30000
 #define MAX_SEARCH_TERM_LEN 1024
 #define IOVEC_LEN 4096
+#define MAX_FILE_NAME 512
+
 
 // Free from which blocks are taken and read into from files
 struct queue_head* free_iovec_queue = NULL;
 
 // List on which search is to conducted
+// Metadata of iovec we want to search
+struct search_queue_node {
+	char file_name[MAX_FILE_NAME]; 
+	int iovec_num;
+	struct iovec* vec;	
+};
+
 struct queue_head* search_queue = NULL;
 
 int search_queue_add(char* file, struct queue_head* search_queue);
@@ -49,13 +58,15 @@ struct queue_head* create_iovec_queue(int nblks ,int block_size) {
   int i;
 
 	// Create list of empty iovec's
+	struct search_queue_node* sqn = malloc(nblks*sizeof(struct search_queue_node));
 	struct iovec* vec = malloc(nblks*sizeof(struct iovec));
   for(i = 0 ; i < nblks;  i++) {
     vec[i].iov_base = malloc(block_size);
     vec[i].iov_len = block_size;
+		sqn[i].vec = vec + i;
   }
 
-	queue_prepend_all(q,vec,sizeof(struct iovec),nblks);
+	queue_prepend_all(q,sqn,sizeof(struct search_queue_node),nblks);
   return q; 
 }
 
@@ -98,7 +109,7 @@ void search_buffer (int thread_id, const char* file_name,
 		
     int line_length = line_end_pos - line_begin_pos + 1;
 
-    int file_pos =  buf_file_pos + match_pos;
+    int match_file_pos =  buf_file_pos + match_pos;
 
     if(line_length < 0) {
       fprintf(stderr, "search_buffer WARNING negative line length  buffer length %d match_pos %d \n", buf_len, match_pos);
@@ -108,11 +119,12 @@ void search_buffer (int thread_id, const char* file_name,
             ,line_begin, line_end,
             line_begin_pos, line_end_pos, line_length);
 
-    char out[line_length+1];
-    memcpy(&out, buf_base+line_begin_pos, line_length);
-    out[line_length]='\0';
+    char match_string[line_length+1];
+    memcpy(&match_string, buf_base+line_begin_pos, line_length);
+    match_string[line_length]='\0';
 
-    fprintf(stdout,"[T:%d] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,file_pos,out);
+		//    fprintf(stderr,"[T:%d] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,match_file_pos,match_string);
+    fprintf(stdout,"%s:%d:%s\n",file_name,match_file_pos,match_string);
 
   }
 }
@@ -155,19 +167,21 @@ void* searcher_thread_start(void* arg){
 
   while(1) {
 
-		// TODO here we get the buffer from the search queue
-    struct iovec* buffer = queue_take(targ->search_queue,1);
-    if(buffer == NULL){ // done
+		struct search_queue_node* sqn = queue_take(targ->search_queue,1);
+    if(sqn == NULL){ // done
       fprintf(stderr,"Stopping %d end\n",targ->index);
       return NULL;
     }
-
-    search_buffer(targ->index,"",targ->search_term,0,buffer);
+		//		struct iovec* buffer = sqn->vec;
+    search_buffer(targ->index,sqn->file_name,targ->search_term,sqn->iovec_num,sqn->vec);
 
     // After we have finished searching we return this iovec back to 
     // list free iovec 
-    struct queue* free_node = queue_create_node(buffer,sizeof(struct iovec));
+		// free the search node;
+		//		free(sqn);
+    struct queue* free_node = queue_create_node(sqn,sizeof(struct search_queue_node));
     queue_prepend(free_iovec_queue,free_node);
+
   }  
   return NULL;
 }
@@ -175,9 +189,6 @@ void* searcher_thread_start(void* arg){
 
 /**
  * Reads a file and appends it to the search list
- * 
- * TODO: Add buffers that have been searched back to the free list
- * TODO: Doesnt handle empty queue handle running out of  
  */
 int search_queue_add(char* file, struct queue_head* search_queue) {
   int fd = open(file, O_RDONLY);
@@ -196,21 +207,27 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
   int total_bytes = file_info.st_size;  
   int iovecs_to_read = (int)ceil((double)total_bytes/(1.0*IOVEC_LEN));
 
-  struct iovec*  buffers = (struct iovec*) queue_take(free_iovec_queue, iovecs_to_read);
-  if(buffers == NULL){    
+  struct search_queue_node*  sqn = (struct search_queue_node*) queue_take(free_iovec_queue, iovecs_to_read);
+  if(sqn == NULL){    
     return 0;
   }
 
+	struct iovec* buffers[iovecs_to_read];
+	int i = 0;
+	for(i = 0; i < iovecs_to_read; i++){
+		buffers[i] = sqn[i].vec;
+	}
+
   // gather all files blocks that can be read into buffers
-  int bytes_read = readv(fd,buffers,iovecs_to_read);
+  int bytes_read = readv(fd,*buffers,iovecs_to_read);
 
-	// we prepend the bare iovec
-	// TODO Add file meta data
-	// File name
-	// Block number of the iovec
-	// TODO here we add the buffer the search queue
-  queue_prepend_all(search_queue,buffers,sizeof(struct iovec),iovecs_to_read); 
-
+	for(i = 0; i < iovecs_to_read; i++){
+		//		struct search_queue_node* node = malloc(sizeof(struct search_queue_node));
+		strncpy(sqn->file_name,file,MAX_FILE_NAME);
+		sqn->iovec_num = i;
+		sqn->vec = buffers[i];
+		queue_prepend_one(search_queue, sqn,sizeof(struct search_queue_node));		
+	}
   fprintf(stderr,"Read file [%s] \n%d bytes num iovecs %d \n",file,bytes_read,iovecs_to_read);
   close(fd);
 
