@@ -154,6 +154,8 @@ void* searcher_thread_start(void* arg){
   fprintf(stderr,"searcher %d thread started! \n",targ->index);
 
   while(1) {
+
+		// TODO here we get the buffer from the search queue
     struct iovec* buffer = queue_take(targ->search_queue,1);
     if(buffer == NULL){ // done
       fprintf(stderr,"Stopping %d end\n",targ->index);
@@ -206,6 +208,7 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
 	// TODO Add file meta data
 	// File name
 	// Block number of the iovec
+	// TODO here we add the buffer the search queue
   queue_prepend_all(search_queue,buffers,sizeof(struct iovec),iovecs_to_read); 
 
   fprintf(stderr,"Read file [%s] \n%d bytes num iovecs %d \n",file,bytes_read,iovecs_to_read);

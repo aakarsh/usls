@@ -28,7 +28,6 @@
 #include <unistd.h>
 #include <string.h>
 
-
 #include "queue.h"
 
 // Basic constructor
