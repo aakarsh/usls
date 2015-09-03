@@ -28,12 +28,15 @@
 #include <unistd.h>
 #include <string.h>
 
+#include <sys/types.h>
+#include <dirent.h>
+
 #include "queue.h" 
 
 #define FREE_QUEUE_SIZE 30000
 #define MAX_SEARCH_TERM_LEN 1024
 #define IOVEC_LEN 4096
-#define MAX_FILE_NAME 512
+#define MAX_FILE_NAME 2048
 
 
 // Free from which blocks are taken and read into from files
@@ -136,7 +139,7 @@ void search_buffer (int thread_id, const char* file_name,
 struct file_reader_thread_args {
   int index ;
   struct queue_head* in_queue;
-  struct queue_head* search_queue;
+  struct queue_head* out_queue;
 };
 
 
@@ -151,7 +154,7 @@ void* file_reader_thread_start(void* arg) {
       fprintf(stderr,"Stopping reader %d end\n",targ->index);
       return NULL;
     } 
-    search_queue_add(file,targ->search_queue);
+    search_queue_add(file,targ->out_queue);
   }
   return NULL;
 }
@@ -237,6 +240,37 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
   return bytes_read;
 }
 
+void recursive_add_files(char* dir_path, struct queue_head* file_queue){
+	fprintf(stderr,"Reading directory path %s\n",dir_path);
+	DIR* dir = opendir(dir_path);
+	
+	struct dirent * f;
+	while((f = readdir(dir))!=NULL){
+		if(strcmp(".",f->d_name) == 0 || strcmp("..",f->d_name) == 0 || f->d_name[0] == '.')
+			continue;
+
+		char path[MAX_FILE_NAME];
+		int len = snprintf(path,sizeof(path)-1,"%s/%s",dir_path,f->d_name);
+		path[len]='\0';
+
+		if(f->d_type == DT_DIR) {
+			recursive_add_files(path,file_queue);
+			continue;
+		}
+
+		if(!DT_REG == f->d_type){
+			continue;		
+		}
+
+		char* file_path = strndup(path,MAX_FILE_NAME);
+		struct queue* node = queue_create_node(file_path,strlen(file_path)+1);		
+		queue_prepend(file_queue,node);
+	}
+
+	closedir(dir);	
+
+}
+
 int main(int argc,char * argv[])
 {
   int num_processors = 1;
@@ -284,8 +318,19 @@ int main(int argc,char * argv[])
       queue_prepend(file_queue,node);
     }
   } else{
-    struct queue* node = queue_create_node(argv[2],strlen(argv[2]));
-    queue_prepend(file_queue,node);
+		struct stat file_info;
+		if(stat(argv[2],&file_info)!=0) {
+			fprintf(stderr, "Couldnt locate file %s\n",argv[2]);
+			perror("fstat");
+			return -1;
+		}
+
+		if(S_ISDIR(file_info.st_mode)){
+			recursive_add_files(argv[2],file_queue);
+		} else {		//regular file
+			struct queue* node = queue_create_node(argv[2],strlen(argv[2]));
+			queue_prepend(file_queue,node);
+		}
   }
   // we are done filling this queue
   queue_mark_finish_filling(file_queue);
@@ -297,7 +342,7 @@ int main(int argc,char * argv[])
   int i;
   for(i = 0 ; i < num_readers; i++) {
     reader_args[i].index = 0;
-    reader_args[i].search_queue = search_queue;
+    reader_args[i].out_queue = search_queue;
     reader_args[i].in_queue = file_queue;
     pthread_create(&reader_id[i],NULL,&file_reader_thread_start,(void*)&reader_args[i]);
   }
