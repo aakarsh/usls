@@ -16,7 +16,9 @@ struct queue_head{
 };
 
 struct queue* queue_create_node(void* data, int data_len);
-struct queue_head* queue_init(struct queue_head** list) ;
+
+int queue_destroy(struct queue_head* q);
+struct queue_head* queue_new() ;
 
 void queue_mark_finish_filling(struct queue_head* list);
 void* queue_take(struct queue_head* queue, int n);

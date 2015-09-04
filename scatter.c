@@ -58,7 +58,7 @@ struct queue_head* create_iovec_queue(int nblks ,int block_size);
 
 
 struct queue_head* create_iovec_queue(int nblks ,int block_size) {
-  struct queue_head* q = queue_init(NULL);  
+  struct queue_head* q = queue_new();  
   int i;
 
   // Create list of empty iovec's
@@ -317,9 +317,9 @@ int main(int argc,char * argv[])
   free_iovec_queue = create_iovec_queue(FREE_QUEUE_SIZE,IOVEC_LEN);
 
   // Initiazlie a Search Queue
-  search_queue = queue_init(NULL);
+  search_queue = queue_new();
 
-  struct queue_head* file_queue = queue_init(NULL);
+  struct queue_head* file_queue = queue_new();
 
   // add files to file_queue
   if(strcmp(argv[2],"-") == 0) { // read a list of files from stdin
@@ -393,6 +393,12 @@ int main(int argc,char * argv[])
 
   // Wait for searchers to finsih pending work and die
 	join_transformers(searcher_id,num_searchers);
+
+	//	free(search_queue);
+	// should contain all the empty nodes
+	//	queue_destroy(free_iovec_queue);
+	//	free(free_iovec_queue);
+	free(searcher_id);
 
   return ret;
 }

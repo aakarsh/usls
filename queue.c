@@ -38,23 +38,35 @@ struct queue* queue_create_node(void* data, int data_len) {
   return node;  
 }
 
-struct queue_head* queue_init(struct queue_head** list) {
-  struct queue_head* new_list =  (struct queue_head*) malloc(sizeof(struct queue_head));
-
-  if(list!=NULL){
-    *list = new_list;
-  }
-  (new_list)->head = NULL;
-  (new_list)->size = 0;
-  (new_list)->finish_filling = 0;
-
-  pthread_mutex_init(&(new_list)->lock, NULL);
-  pthread_cond_init(&(new_list)->modified_cv, NULL);
-
-  return new_list;  
+struct queue_head* queue_new() {
+  struct queue_head* q =  (struct queue_head*) malloc(sizeof(struct queue_head));
+  q->head = NULL;
+  q->size = 0;
+  q->finish_filling = 0;
+  pthread_mutex_init(&q->lock, NULL);
+  pthread_cond_init(&q->modified_cv, NULL);
+  return q;  
 }
 
 
+int queue_destroy(struct queue_head* q) {
+  pthread_mutex_lock(&q->lock);
+	struct queue * cur = q->head;
+	while(cur!=NULL){
+		struct queue* tmp = cur;
+		if(tmp->data !=NULL){
+			free(tmp->data);
+		}
+		free(tmp);
+		cur = cur->next;		
+	}
+	q->size = 0;
+  pthread_cond_init(&q->modified_cv, NULL);
+  pthread_mutex_unlock(&q->lock);
+	free(q);
+
+	return 0;
+}
 
 /**
  * Adds a free'ed iovec_list node back into the free_list
@@ -68,17 +80,17 @@ void queue_prepend(struct queue_head* q , struct queue* node) {
   pthread_mutex_unlock(&q->lock);
 }
 
-void queue_prepend_one(struct queue_head* list , void* node, int node_sz) {
-  queue_prepend_all(list,node,node_sz,1);
+void queue_prepend_one(struct queue_head* q , void* node, int node_sz) {
+  queue_prepend_all(q,node,node_sz,1);
 }
 
-void queue_prepend_all(struct queue_head* list , void* node, int node_sz,int n) {
+void queue_prepend_all(struct queue_head* q , void* data, int node_sz,int n) {
   int i = 0;
   for (i = 0 ; i < n; i++) {
-    struct queue* list_node = malloc(sizeof(struct queue));
-    list_node->data = (node+ i*node_sz);
-    list_node->data_len = node_sz;		
-    queue_prepend(list,list_node);
+    struct queue* node = malloc(sizeof(struct queue));
+    node->data = (data + i*node_sz);
+    node->data_len = node_sz;		
+    queue_prepend(q,node);
   }
 }
 
@@ -181,6 +193,7 @@ pthread_t* start_tranformers(char* name,
 
   pthread_t* transformer_id = malloc(sizeof(pthread_t)* n);
   struct queue_transformer_arg* args = malloc(sizeof (struct queue_transformer_arg) *n);
+
   int i;
   for(i = 0 ; i < n; i++) {
 		strncpy(args[i].name,name,19);
@@ -189,8 +202,12 @@ pthread_t* start_tranformers(char* name,
     args[i].out_q = out_q;
 		args[i].transform = transform;
 		args[i].priv = priv;
-		printf("Creating thread %s:%d %p %p \n",args[i].name,args[i].id, args[i].in_q,args[i].out_q);
+
+		printf("Creating thread %s:%d %p %p \n",args[i].name,args[i].id, 
+					 args[i].in_q,args[i].out_q);
+
 		pthread_create(&transformer_id[i],NULL,run_queue_tranformer,&(args[i]));
+
   }
 	return transformer_id;
 }
