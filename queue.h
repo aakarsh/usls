@@ -1,3 +1,5 @@
+/* -*- Mode: c; tab-width: 2; indent-tabs-mode: 0; c-basic-offset: 2; -*- */
+
 #include <pthread.h>
 
 struct queue {

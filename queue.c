@@ -1,4 +1,4 @@
-/* -*- Mode: c; tab-width: 2; indent-tabs-mode: 1; c-basic-offset: 2; -*- */
+/* -*- Mode: c; tab-width: 2; indent-tabs-mode: 0; c-basic-offset: 2; -*- */
 
 #include <math.h>
 #include <assert.h>

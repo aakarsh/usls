@@ -1,4 +1,4 @@
-/* -*- Mode: c; tab-width: 2; indent-tabs-mode: 1; c-basic-offset: 2; -*- */
+/* -*- Mode: c; tab-width: 2; indent-tabs-mode: 0; c-basic-offset: 2; -*- */
 
 #include <math.h>
 #include <assert.h>
@@ -129,7 +129,7 @@ void search_buffer (int thread_id, const char* file_name,
       fprintf(stderr, "search_buffer WARNING negative line length  buffer length %d match_pos %d \n", buf_len, match_pos);
     }
 
-    fprintf(stderr,"[T %d][loop %d][buf %d]search_buffers line offset %d [%p %p] [ %d -  %d] length %d\n"
+    fprintf(stderr,"MATCH : [T %d][loop %d][buf %d]search_buffers line offset %d [%p %p] [ %d -  %d] length %d\n"
             ,thread_id
             ,loop_count
             ,buf_num
@@ -199,22 +199,23 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
   if(sqn == NULL){    
     return 0;
   }
-
-  struct iovec* buffers[iovecs_to_read];
-
   int i = 0;
-  for(i = 0; i < iovecs_to_read; i++){
-    buffers[i] = sqn[i].vec;    
+  
+  struct iovec buffers[iovecs_to_read];
+  // Assign base address from nodes gotten from free list
+  for(i = 0;i < iovecs_to_read; i++){
+    buffers[i].iov_base = sqn[i].vec->iov_base;
+    buffers[i].iov_len = sqn[i].vec->iov_len;
   }
-
+  
   // gather all files blocks that can be read into buffers
-  int bytes_read = readv(fd,*buffers,iovecs_to_read);
+  int bytes_read = readv(fd, buffers , iovecs_to_read);
 
+  // Overwite previous search data 
   for(i = 0; i < iovecs_to_read; i++){
     strncpy(sqn[i].file_name,file,MAX_FILE_NAME);
     sqn[i].file_name_len = strlen(file);
     sqn[i].iovec_num = i;
-    sqn[i].vec = buffers[i];
   }
 
   queue_prepend_all(search_queue, sqn ,sizeof(struct search_queue_node),iovecs_to_read);    
