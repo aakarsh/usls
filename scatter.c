@@ -146,33 +146,10 @@ void search_buffer (int thread_id, const char* file_name,
   }
 }
 
-
-struct file_reader_thread_args {
-  int index ;
-  struct queue_head* in_queue;
-  struct queue_head* out_queue;
-};
-
 struct queue* file_reader_tranform(void* obj, int id,void* priv, struct queue_head* out_q) {
 	char* file = (char*)  obj;
 	search_queue_add(file,out_q);
 	return NULL;
-}
-
-//TODO: Very similar to searcher queue need to simplyfy
-void* file_reader_thread_start(void* arg) {
-
-  struct file_reader_thread_args* targ  = (struct file_reader_thread_args*) arg;
-
-  while(1) {
-    char* file = queue_take(targ->in_queue,1);
-    if(file == NULL){ // done
-      fprintf(stderr,"Stopping reader %d end\n",targ->index);
-      return NULL;
-    } 
-    search_queue_add(file,targ->out_queue);
-  }
-  return NULL;
 }
 
 struct queue* search_transform(void* obj, int id, void* priv,struct queue_head* oq) {
