@@ -80,7 +80,7 @@ void search_buffer (int thread_id, const char* file_name,
                     struct iovec* buffer)
 {
 
-	fprintf(stderr,"search_buffer %d : %s %s %d \n",thread_id,file_name,search_term,buf_num);
+  fprintf(stderr,"search_buffer %d : %s %s %d \n",thread_id,file_name,search_term,buf_num);
   void* buf_base = buffer->iov_base;
   int   buf_len = buffer->iov_len;
 
@@ -89,9 +89,10 @@ void search_buffer (int thread_id, const char* file_name,
   
   void* match_idx = NULL;
   int offset = 0;
-
+  int loop_count = 0;
   while ( offset < buf_end_pos
           && (match_idx = memmem(buf_base+offset,buf_len-offset,search_term,strlen(search_term))) != NULL) {
+
 
     // Found a match
     int match_pos  =  (match_idx - buf_base );
@@ -121,17 +122,23 @@ void search_buffer (int thread_id, const char* file_name,
       fprintf(stderr, "search_buffer WARNING negative line length  buffer length %d match_pos %d \n", buf_len, match_pos);
     }
 
-    fprintf(stderr,"search_buffers line [%p %p] [ %d -  %d] length %d\n"
-            ,line_begin, line_end,
-            line_begin_pos, line_end_pos, line_length);
 
     char match_string[line_length+1];
     memcpy(&match_string, buf_base+line_begin_pos, line_length);
     match_string[line_length]='\0';
 
+    fprintf(stderr,"[T %d][loop %d][buf %d]search_buffers line offset %d [%p %p] [ %d -  %d] length %d: %s\n"
+            ,thread_id
+            ,loop_count
+            ,buf_num
+            ,offset,line_begin, line_end,
+            line_begin_pos, line_end_pos, line_length,match_string);
+
     //fprintf(stderr,"[T:%d] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,match_file_pos,match_string);
     //TODO seeing duplicates in results
     fprintf(stdout,"%s:%d:%s\n",file_name,match_file_pos,match_string);
+
+    loop_count++;
 
   }
 }
@@ -169,23 +176,24 @@ struct searcher_thread_args {
 
 struct queue* search_transform_function(void* obj, int id,void* priv) {
 
-	struct search_queue_node* sqn = (struct search_queue_node*) obj;
-	char*  search_term = (char*) priv;
-	fprintf(stderr,"Call search_transform_function [%s] on file %s \n",
-					search_term,sqn->file_name);
+  struct search_queue_node* sqn = (struct search_queue_node*) obj;
+  char*  search_term = (char*) priv;
+  fprintf(stderr,"Call search_transform_function [%s] on file %s \n",
+          search_term,sqn->file_name);
 
-	search_buffer(id,sqn->file_name,search_term,sqn->iovec_num,sqn->vec);
-	// After we have finished searching we return this iovec back to 
-	// For safety we make sure to zero out the data before returning to free list
-	//memset(sqn->file_name, 0, MAX_FILE_NAME);
-	//memset(sqn->vec->iov_base, 0, sqn->vec->iov_len);
-	struct queue* free_node = queue_create_node(sqn,sizeof(struct search_queue_node));
-	fprintf(stderr,"Returning free node \n");
+  search_buffer(id,sqn->file_name,search_term,sqn->iovec_num,sqn->vec);
+  // After we have finished searching we return this iovec back to 
+  // For safety we make sure to zero out the data before returning to free list
+  memset(sqn->file_name, 0, MAX_FILE_NAME);
+  memset(sqn->vec->iov_base, 0, sqn->vec->iov_len);
+  struct queue* free_node = queue_create_node(sqn,sizeof(struct search_queue_node));
+  fprintf(stderr,"Returning free node \n");
 
-	return free_node;
+  return free_node;
 }
 
 
+/***
 void* searcher_thread_start(void* arg){
   struct searcher_thread_args* targ  = (struct searcher_thread_args*) arg;
 
@@ -205,13 +213,15 @@ void* searcher_thread_start(void* arg){
     // For safety we make sure to zero out the data before returning to free list
     memset(sqn->file_name, 0, MAX_FILE_NAME);
     memset(sqn->vec->iov_base, 0, sqn->vec->iov_len);
+
     struct queue* free_node = queue_create_node(sqn,sizeof(struct search_queue_node));
     queue_prepend(free_iovec_queue,free_node);
-
   }  
+
   return NULL;
 }
 
+*/
 
 /**
  * Reads a file and appends it to the search list
@@ -239,21 +249,24 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
   }
 
   struct iovec* buffers[iovecs_to_read];
+
   int i = 0;
   for(i = 0; i < iovecs_to_read; i++){
-    buffers[i] = sqn[i].vec;
+    buffers[i] = sqn[i].vec;    
   }
 
   // gather all files blocks that can be read into buffers
   int bytes_read = readv(fd,*buffers,iovecs_to_read);
 
   for(i = 0; i < iovecs_to_read; i++){
-    strncpy(sqn->file_name,file,MAX_FILE_NAME);
-    sqn->file_name_len = strlen(file);
-    sqn->iovec_num = i;
-    sqn->vec = buffers[i];
-    queue_prepend_one(search_queue, sqn,sizeof(struct search_queue_node));    
+    strncpy(sqn[i].file_name,file,MAX_FILE_NAME);
+    sqn[i].file_name_len = strlen(file);
+    sqn[i].iovec_num = i;
+    sqn[i].vec = buffers[i];
+    //queue_prepend_one(search_queue, sqn + i,sizeof(struct search_queue_node));    
   }
+  queue_prepend_all(search_queue, sqn ,sizeof(struct search_queue_node),iovecs_to_read);    
+
   fprintf(stderr,"Read file [%s] \n%d bytes num iovecs %d \n",file,bytes_read,iovecs_to_read);
   close(fd);
 
@@ -261,33 +274,33 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
 }
 
 void recursive_add_files(char* dir_path, struct queue_head* file_queue){
-	fprintf(stderr,"Reading directory path %s\n",dir_path);
-	DIR* dir = opendir(dir_path);
-	
-	struct dirent * f;
-	while((f = readdir(dir))!=NULL){
-		if(strcmp(".",f->d_name) == 0 || strcmp("..",f->d_name) == 0 || f->d_name[0] == '.')
-			continue;
+  fprintf(stderr,"Reading directory path %s\n",dir_path);
+  DIR* dir = opendir(dir_path);
+  
+  struct dirent * f;
+  while((f = readdir(dir))!=NULL){
+    if(strcmp(".",f->d_name) == 0 || strcmp("..",f->d_name) == 0 || f->d_name[0] == '.')
+      continue;
 
-		char path[MAX_FILE_NAME];
-		int len = snprintf(path,sizeof(path)-1,"%s/%s",dir_path,f->d_name);
-		path[len]='\0';
+    char path[MAX_FILE_NAME];
+    int len = snprintf(path,sizeof(path)-1,"%s/%s",dir_path,f->d_name);
+    path[len]='\0';
 
-		if(f->d_type == DT_DIR) {
-			recursive_add_files(path,file_queue);
-			continue;
-		}
+    if(f->d_type == DT_DIR) {
+      recursive_add_files(path,file_queue);
+      continue;
+    }
 
-		if(!DT_REG == f->d_type){
-			continue;		
-		}
+    if(!DT_REG == f->d_type){
+      continue;   
+    }
 
-		char* file_path = strndup(path,MAX_FILE_NAME);
-		struct queue* node = queue_create_node(file_path,strlen(file_path)+1);		
-		queue_prepend(file_queue,node);
-	}
+    char* file_path = strndup(path,MAX_FILE_NAME);
+    struct queue* node = queue_create_node(file_path,strlen(file_path)+1);    
+    queue_prepend(file_queue,node);
+  }
 
-	closedir(dir);	
+  closedir(dir);  
 
 }
 
@@ -338,19 +351,19 @@ int main(int argc,char * argv[])
       queue_prepend(file_queue,node);
     }
   } else{
-		struct stat file_info;
-		if(stat(argv[2],&file_info)!=0) {
-			fprintf(stderr, "Couldnt locate file %s\n",argv[2]);
-			perror("fstat");
-			return -1;
-		}
+    struct stat file_info;
+    if(stat(argv[2],&file_info)!=0) {
+      fprintf(stderr, "Couldnt locate file %s\n",argv[2]);
+      perror("fstat");
+      return -1;
+    }
 
-		if(S_ISDIR(file_info.st_mode)){
-			recursive_add_files(argv[2],file_queue);
-		} else {		//regular file
-			struct queue* node = queue_create_node(argv[2],strlen(argv[2]));
-			queue_prepend(file_queue,node);
-		}
+    if(S_ISDIR(file_info.st_mode)){
+      recursive_add_files(argv[2],file_queue);
+    } else {    //regular file
+      struct queue* node = queue_create_node(argv[2],strlen(argv[2])+1);
+      queue_prepend(file_queue,node);
+    }
   }
   // we are done filling this queue
   queue_mark_finish_filling(file_queue);
@@ -369,12 +382,12 @@ int main(int argc,char * argv[])
 
   int ret =  0;
 
-	pthread_t* searcher_id = start_tranformers("searcher",
-																						 search_transform_function,
-																						 argv[1], /*search terim*/
-																						 search_queue,
-																						 free_iovec_queue,
-																						 num_searchers);
+  pthread_t* searcher_id = start_tranformers("searcher",
+                                             search_transform_function,
+                                             argv[1], /*search terim*/
+                                             search_queue,
+                                             free_iovec_queue,
+                                             num_searchers);
   
   fprintf(stderr,"Waiting for readers\n");
   // Wait for reader
@@ -392,13 +405,12 @@ int main(int argc,char * argv[])
   fprintf(stderr,"Waiting for searchers");
 
   // Wait for searchers to finsih pending work and die
-	join_transformers(searcher_id,num_searchers);
+  join_transformers(searcher_id,num_searchers);
 
-	//	free(search_queue);
-	// should contain all the empty nodes
-	//	queue_destroy(free_iovec_queue);
-	//	free(free_iovec_queue);
-	free(searcher_id);
+  queue_destroy(search_queue);
+  queue_destroy(free_iovec_queue);
+
+  free(searcher_id);
 
   return ret;
 }

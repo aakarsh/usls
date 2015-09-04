@@ -54,8 +54,12 @@ int queue_destroy(struct queue_head* q) {
 	struct queue * cur = q->head;
 	while(cur!=NULL){
 		struct queue* tmp = cur;
-		if(tmp->data !=NULL){
-			free(tmp->data);
+		if(tmp->data != NULL){
+			//TODO free data
+			//fprintf(stderr,"Trying to free [%p] \n",tmp->data);
+			//TODO some pointers are looking at stale buffers?
+			//free(tmp->data);
+			//fprintf(stderr,"Finished free [%p] \n",tmp->data);
 		}
 		free(tmp);
 		cur = cur->next;		
@@ -196,6 +200,7 @@ pthread_t* start_tranformers(char* name,
 
   int i;
   for(i = 0 ; i < n; i++) {
+
 		strncpy(args[i].name,name,19);
     args[i].id = i;
     args[i].in_q = in_q;
@@ -205,9 +210,7 @@ pthread_t* start_tranformers(char* name,
 
 		printf("Creating thread %s:%d %p %p \n",args[i].name,args[i].id, 
 					 args[i].in_q,args[i].out_q);
-
 		pthread_create(&transformer_id[i],NULL,run_queue_tranformer,&(args[i]));
-
   }
 	return transformer_id;
 }
