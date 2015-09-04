@@ -104,15 +104,12 @@ void queue_mark_finish_filling(struct queue_head* list){
  */
 void* queue_take(struct queue_head* queue, int n) {
   int i = 0;
-
   pthread_mutex_lock(&queue->lock);
 
-
   while((queue->size < n)) {
-    if(!queue->finish_filling) {
-      pthread_cond_wait(&queue->modified_cv,&queue->lock);
-    }
-    if(queue->finish_filling && queue->size < n) {
+		if(!queue->finish_filling)
+			pthread_cond_wait(&queue->modified_cv,&queue->lock);
+		else {
       pthread_mutex_unlock(&queue->lock);
       return NULL;
     }
@@ -156,10 +153,16 @@ void* run_queue_tranformer(void* arg) {
       fprintf(stderr,"Stopping %s %d end\n",qarg->name,qarg->id);
       return NULL;
     }
+		
 		fprintf(stderr,"Running  %s:%d \n",qarg->name,qarg->id);
+
     struct queue* node = qarg->transform(obj,qarg->id,qarg->priv);	
-		if(node!=NULL && qarg->out_q !=NULL)
+
+		if(node!=NULL && qarg->out_q !=NULL) {
+			fprintf(stderr,"Prepending to %p node %p \n",qarg->out_q,node);			
 			queue_prepend(qarg->out_q, node);
+		}
+
 	}  
 
   return NULL;
@@ -177,16 +180,17 @@ pthread_t* start_tranformers(char* name,
 														 int n){
 
   pthread_t* transformer_id = malloc(sizeof(pthread_t)* n);
-  struct queue_transformer_arg args[n];
+  struct queue_transformer_arg* args = malloc(sizeof (struct queue_transformer_arg) *n);
   int i;
   for(i = 0 ; i < n; i++) {
-		strncpy(args[i].name,name,20);
+		strncpy(args[i].name,name,19);
     args[i].id = i;
     args[i].in_q = in_q;
     args[i].out_q = out_q;
 		args[i].transform = transform;
 		args[i].priv = priv;
-    pthread_create(&transformer_id[i],NULL,&run_queue_tranformer,(void*)&args[i]);
+		printf("Creating thread %s:%d %p %p \n",args[i].name,args[i].id, args[i].in_q,args[i].out_q);
+		pthread_create(&transformer_id[i],NULL,run_queue_tranformer,&(args[i]));
   }
 	return transformer_id;
 }

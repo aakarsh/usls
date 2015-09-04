@@ -177,8 +177,8 @@ struct queue* search_transform_function(void* obj, int id,void* priv) {
 	search_buffer(id,sqn->file_name,search_term,sqn->iovec_num,sqn->vec);
 	// After we have finished searching we return this iovec back to 
 	// For safety we make sure to zero out the data before returning to free list
-	memset(sqn->file_name, 0, MAX_FILE_NAME);
-	memset(sqn->vec->iov_base, 0, sqn->vec->iov_len);
+	//memset(sqn->file_name, 0, MAX_FILE_NAME);
+	//memset(sqn->vec->iov_base, 0, sqn->vec->iov_len);
 	struct queue* free_node = queue_create_node(sqn,sizeof(struct search_queue_node));
 	fprintf(stderr,"Returning free node \n");
 
@@ -311,7 +311,7 @@ int main(int argc,char * argv[])
   }
 
   int num_readers = 1;
-  int num_searchers = 3 * num_processors;
+  int num_searchers = 1;
 
   // Initialize Free Queue
   free_iovec_queue = create_iovec_queue(FREE_QUEUE_SIZE,IOVEC_LEN);

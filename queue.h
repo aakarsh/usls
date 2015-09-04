@@ -42,4 +42,3 @@ struct queue_transformer_arg {
 
 pthread_t* start_tranformers(char* name,queue_transformer transform,void* priv, struct queue_head* in_q, struct queue_head* out_q, int n);
 void join_transformers(pthread_t* id , int n);
-
