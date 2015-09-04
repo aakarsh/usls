@@ -64,14 +64,14 @@ struct queue_head* create_iovec_queue(int nblks ,int block_size) {
   // Create list of empty iovec's
   struct search_queue_node* sqn = malloc(nblks*sizeof(struct search_queue_node));
   struct iovec* vec = malloc(nblks*sizeof(struct iovec));
-	
+  
   int i;
   for(i = 0 ; i < nblks;  i++) {
     vec[i].iov_base = malloc(block_size);
     vec[i].iov_len = block_size;
     sqn[i].vec = vec + i;
   }
-	
+  
   queue_prepend_all(q,sqn,sizeof(struct search_queue_node),nblks);
   return q; 
 }
@@ -82,7 +82,7 @@ void search_buffer (int thread_id, const char* file_name,
 {
 
   fprintf(stderr,"search_buffer %d : %s %s %d \n"
-					,thread_id,file_name,query,buf_num);
+          ,thread_id,file_name,query,buf_num);
 
   void* buf_base = buffer->iov_base;
   int   buf_len = buffer->iov_len;
@@ -93,19 +93,19 @@ void search_buffer (int thread_id, const char* file_name,
   void* match_idx = NULL;
   int offset = 0;
   int loop_count = 0;
-	int lquery = strlen(query);
+  int lquery = strlen(query);
 
   while ( offset < buf_end_pos
           && (match_idx = memmem(buf_base+offset, /* haystack start */
-																 buf_len-offset,  /* haystack len   */
-																 query,
-																 lquery)) != NULL) {
+                                 buf_len-offset,  /* haystack len   */
+                                 query,
+                                 lquery)) != NULL) {
 
     // Found a match
     int match_pos  =  (match_idx - buf_base );
     // offset right after match
     offset = match_pos+1;
-		
+    
     //find end of line
     int line_end_pos = buf_end_pos;
     void* line_end = memchr(match_idx,'\n',buf_len-match_pos);
@@ -135,11 +135,11 @@ void search_buffer (int thread_id, const char* file_name,
             ,buf_num
             ,offset,line_begin, line_end,
             line_begin_pos, line_end_pos, line_length);
-		
+    
 
     char match_string[line_length+1];
     memcpy(&match_string, buf_base+line_begin_pos, line_length);
-    match_string[line_length]='\0';		
+    match_string[line_length]='\0';   
 
     //fprintf(stderr,"[T:%d] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,match_file_pos,match_string);
     //TODO seeing duplicates in results
@@ -151,9 +151,9 @@ void search_buffer (int thread_id, const char* file_name,
 }
 
 struct queue* file_reader_tranform(void* obj, int id,void* priv, struct queue_head* out_q) {
-	char* file = (char*)  obj;
-	search_queue_add(file,out_q);
-	return NULL;
+  char* file = (char*)  obj;
+  search_queue_add(file,out_q);
+  return NULL;
 }
 
 struct queue* search_transform(void* obj, int id, void* priv,struct queue_head* oq) {
@@ -322,15 +322,15 @@ int main(int argc,char * argv[])
   queue_mark_finish_filling(file_queue);
 
   pthread_t* reader_id = 
-		start_tranformers("reader",file_reader_tranform,NULL,
-											file_queue,search_queue,num_readers);
+    start_tranformers("reader",file_reader_tranform,NULL,
+                      file_queue,search_queue,num_readers);
 
   pthread_t* searcher_id = 
-		start_tranformers("searcher",search_transform,argv[1],
-											search_queue,free_iovec_queue,num_searchers);
+    start_tranformers("searcher",search_transform,argv[1],
+                      search_queue,free_iovec_queue,num_searchers);
   
   fprintf(stderr,"Waiting for readers\n");
-	join_transformers(reader_id,num_readers);
+  join_transformers(reader_id,num_readers);
 
   /**
    * Once reader has ended we need to go ahead and cancel on searcher threads
