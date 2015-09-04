@@ -81,6 +81,7 @@ void search_buffer (int thread_id, const char* file_name,
 {
 
   fprintf(stderr,"search_buffer %d : %s %s %d \n",thread_id,file_name,search_term,buf_num);
+
   void* buf_base = buffer->iov_base;
   int   buf_len = buffer->iov_len;
 
@@ -127,12 +128,14 @@ void search_buffer (int thread_id, const char* file_name,
     memcpy(&match_string, buf_base+line_begin_pos, line_length);
     match_string[line_length]='\0';
 
+		/**
     fprintf(stderr,"[T %d][loop %d][buf %d]search_buffers line offset %d [%p %p] [ %d -  %d] length %d: %s\n"
             ,thread_id
             ,loop_count
             ,buf_num
             ,offset,line_begin, line_end,
             line_begin_pos, line_end_pos, line_length,match_string);
+		*/
 
     //fprintf(stderr,"[T:%d] match: [%d]%s: %d: [%s]  \n", thread_id,buf_num,file_name,match_file_pos,match_string);
     //TODO seeing duplicates in results
@@ -150,6 +153,11 @@ struct file_reader_thread_args {
   struct queue_head* out_queue;
 };
 
+struct queue* file_reader_tranform(void* obj, int id,void* priv, struct queue_head* out_q) {
+	char* file = (char*)  obj;
+	search_queue_add(file,out_q);
+	return NULL;
+}
 
 //TODO: Very similar to searcher queue need to simplyfy
 void* file_reader_thread_start(void* arg) {
@@ -167,18 +175,10 @@ void* file_reader_thread_start(void* arg) {
   return NULL;
 }
 
-
-struct searcher_thread_args { 
-  char* search_term;
-  struct queue_head* search_queue;
-  int index;
-};
-
-struct queue* search_transform_function(void* obj, int id,void* priv) {
-
+struct queue* search_transform(void* obj, int id, void* priv,struct queue_head* oq) {
   struct search_queue_node* sqn = (struct search_queue_node*) obj;
   char*  search_term = (char*) priv;
-  fprintf(stderr,"Call search_transform_function [%s] on file %s \n",
+  fprintf(stderr,"Call search_transform [%s] on file %s \n",
           search_term,sqn->file_name);
 
   search_buffer(id,sqn->file_name,search_term,sqn->iovec_num,sqn->vec);
@@ -193,35 +193,6 @@ struct queue* search_transform_function(void* obj, int id,void* priv) {
 }
 
 
-/***
-void* searcher_thread_start(void* arg){
-  struct searcher_thread_args* targ  = (struct searcher_thread_args*) arg;
-
-  fprintf(stderr,"searcher %d thread started! \n",targ->index);
-
-  while(1) {
-
-    struct search_queue_node* sqn = queue_take(targ->search_queue,1);
-    if(sqn == NULL){ // done
-      fprintf(stderr,"Stopping %d end\n",targ->index);
-      return NULL;
-    }
-    //    struct iovec* buffer = sqn->vec;
-    search_buffer(targ->index,sqn->file_name,targ->search_term,sqn->iovec_num,sqn->vec);
-
-    // After we have finished searching we return this iovec back to 
-    // For safety we make sure to zero out the data before returning to free list
-    memset(sqn->file_name, 0, MAX_FILE_NAME);
-    memset(sqn->vec->iov_base, 0, sqn->vec->iov_len);
-
-    struct queue* free_node = queue_create_node(sqn,sizeof(struct search_queue_node));
-    queue_prepend(free_iovec_queue,free_node);
-  }  
-
-  return NULL;
-}
-
-*/
 
 /**
  * Reads a file and appends it to the search list
@@ -323,8 +294,8 @@ int main(int argc,char * argv[])
     return -1;
   }
 
-  int num_readers = 1;
-  int num_searchers = 1;
+  int num_readers = 2;
+  int num_searchers = 4;
 
   // Initialize Free Queue
   free_iovec_queue = create_iovec_queue(FREE_QUEUE_SIZE,IOVEC_LEN);
@@ -368,31 +339,18 @@ int main(int argc,char * argv[])
   // we are done filling this queue
   queue_mark_finish_filling(file_queue);
 
-  // Start and run thread which will read from file and add data to search queue
-  pthread_t reader_id[num_readers];
-  struct file_reader_thread_args reader_args[num_readers];
-  //  reader_args.file = argv[2];
-  int i;
-  for(i = 0 ; i < num_readers; i++) {
-    reader_args[i].index = 0;
-    reader_args[i].out_queue = search_queue;
-    reader_args[i].in_queue = file_queue;
-    pthread_create(&reader_id[i],NULL,&file_reader_thread_start,(void*)&reader_args[i]);
-  }
-
   int ret =  0;
 
-  pthread_t* searcher_id = start_tranformers("searcher",
-                                             search_transform_function,
-                                             argv[1], /*search terim*/
-                                             search_queue,
-                                             free_iovec_queue,
-                                             num_searchers);
+  pthread_t* reader_id = start_tranformers("reader",file_reader_tranform,NULL,
+                                             file_queue,search_queue,num_readers);
+
+  pthread_t* searcher_id = start_tranformers("searcher",search_transform,argv[1],
+                                             search_queue,free_iovec_queue,num_readers);
   
   fprintf(stderr,"Waiting for readers\n");
+
   // Wait for reader
-  for(i = 0; i < num_readers;i++)
-    pthread_join(reader_id[i],NULL);     
+	join_transformers(reader_id,num_readers);
 
   /**
    * Once reader has ended we need to go ahead and cancel on searcher threads
@@ -407,10 +365,9 @@ int main(int argc,char * argv[])
   // Wait for searchers to finsih pending work and die
   join_transformers(searcher_id,num_searchers);
 
-  queue_destroy(search_queue);
-  queue_destroy(free_iovec_queue);
-
-  free(searcher_id);
+  //queue_destroy(search_queue);
+  //queue_destroy(free_iovec_queue);
+  //free(searcher_id);
 
   return ret;
 }

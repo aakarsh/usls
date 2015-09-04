@@ -29,7 +29,7 @@ void queue_prepend(struct queue_head* list , struct queue* node) ;
 
 
 
-typedef struct queue* (*queue_transformer)(void* obj, int id,void* priv);
+typedef struct queue* (*queue_transformer)(void* obj, int id,void* priv, struct queue_head* out_q);
 
 struct queue_transformer_arg {
    int id;

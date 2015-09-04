@@ -39,7 +39,7 @@ struct queue* queue_create_node(void* data, int data_len) {
 }
 
 struct queue_head* queue_new() {
-  struct queue_head* q =  (struct queue_head*) malloc(sizeof(struct queue_head));
+  struct queue_head* q =  (struct queue_head*) malloc (sizeof(struct queue_head));
   q->head = NULL;
   q->size = 0;
   q->finish_filling = 0;
@@ -172,13 +172,12 @@ void* run_queue_tranformer(void* arg) {
 		
 		fprintf(stderr,"Running  %s:%d \n",qarg->name,qarg->id);
 
-    struct queue* node = qarg->transform(obj,qarg->id,qarg->priv);	
+    struct queue* node = qarg->transform(obj,qarg->id,qarg->priv,qarg->out_q);	
 
 		if(node!=NULL && qarg->out_q !=NULL) {
 			fprintf(stderr,"Prepending to %p node %p \n",qarg->out_q,node);			
 			queue_prepend(qarg->out_q, node);
 		}
-
 	}  
 
   return NULL;
@@ -208,7 +207,7 @@ pthread_t* start_tranformers(char* name,
 		args[i].transform = transform;
 		args[i].priv = priv;
 
-		printf("Creating thread %s:%d %p %p \n",args[i].name,args[i].id, 
+		fprintf(stderr,"Creating thread %s:%d %p %p \n",args[i].name,args[i].id, 
 					 args[i].in_q,args[i].out_q);
 		pthread_create(&transformer_id[i],NULL,run_queue_tranformer,&(args[i]));
   }
