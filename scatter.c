@@ -58,20 +58,21 @@ struct queue_head* create_iovec_queue(int nblks ,int block_size);
 
 
 struct queue_head* create_iovec_queue(int nblks ,int block_size) {
+
   struct queue_head* q = queue_new();  
-  int i;
 
   // Create list of empty iovec's
   struct search_queue_node* sqn = malloc(nblks*sizeof(struct search_queue_node));
   struct iovec* vec = malloc(nblks*sizeof(struct iovec));
+	
+  int i;
   for(i = 0 ; i < nblks;  i++) {
     vec[i].iov_base = malloc(block_size);
     vec[i].iov_len = block_size;
     sqn[i].vec = vec + i;
   }
-
+	
   queue_prepend_all(q,sqn,sizeof(struct search_queue_node),nblks);
-
   return q; 
 }
 
@@ -127,7 +128,6 @@ void search_buffer (int thread_id, const char* file_name,
     if(line_length < 0) {
       fprintf(stderr, "search_buffer WARNING negative line length  buffer length %d match_pos %d \n", buf_len, match_pos);
     }
-
 
     fprintf(stderr,"[T %d][loop %d][buf %d]search_buffers line offset %d [%p %p] [ %d -  %d] length %d\n"
             ,thread_id
@@ -215,8 +215,8 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
     sqn[i].file_name_len = strlen(file);
     sqn[i].iovec_num = i;
     sqn[i].vec = buffers[i];
-    //queue_prepend_one(search_queue, sqn + i,sizeof(struct search_queue_node));    
   }
+
   queue_prepend_all(search_queue, sqn ,sizeof(struct search_queue_node),iovecs_to_read);    
 
   fprintf(stderr,"Read file [%s] \n%d bytes num iovecs %d \n",file,bytes_read,iovecs_to_read);
@@ -275,8 +275,8 @@ int main(int argc,char * argv[])
     return -1;
   }
 
-  int num_readers = 2;
-  int num_searchers = 4;
+  int num_readers = 1;
+  int num_searchers = 3;
 
   // Initialize Free Queue
   free_iovec_queue = create_iovec_queue(FREE_QUEUE_SIZE,IOVEC_LEN);
