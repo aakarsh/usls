@@ -145,8 +145,11 @@ void* queue_take(struct queue_head* queue, int n) {
 
   while(i < n && cur!=NULL) { // what about the previous cur check
     int item_size = cur->data_len;
+		//TODO this is a WASTE
+		// We should just return the linked list
     memcpy(retval+(i*item_size),cur->data,item_size);
     struct queue * next = cur->next;
+		//free(cur->data);
     free(cur);
     cur = next;
     i++;

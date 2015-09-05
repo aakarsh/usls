@@ -1,4 +1,4 @@
-CFLAGS=-std=gnu99  -D_GNU_SOURCE
+CFLAGS=-std=gnu99  -D_GNU_SOURCE -fprofile-arcs 
 INCLUDE_FLAGS= -I. -Igen/
 
 
@@ -16,6 +16,7 @@ scat: scatter.c  queue.h queue.c
 
 valgrind: scat
 	valgrind --tool=memcheck --leak-check=yes --show-reachable=yes --num-callers=20 --track-fds=yes ./bin/scat Eggert - < ./bin/emacs.out 2>&1  > gen/v.out
+#	valgrind --tool=callgrind ./bin/scat Eggert - < ./bin/emacs.out 2>&1  > gen/vprof.out
 
 uwc: uwc.c 
 	gcc $(CFLAGS) -g -Wall $(INCLUDE_FLAGS) -o bin/uwc uwc.c
