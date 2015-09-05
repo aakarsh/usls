@@ -157,17 +157,14 @@ struct queue* file_reader_tranform(void* obj, int id,void* priv, struct queue_he
 }
 
 struct queue* search_transform(void* obj, int id, void* priv,struct queue_head* oq) {
+	
   struct search_queue_node* sqn = (struct search_queue_node*) obj;
   char*  search_term = (char*) priv;
+
   fprintf(stderr,"Call search_transform [%s] on file %s \n",
           search_term,sqn->file_name);
 
   search_buffer(id,sqn->file_name,search_term,sqn->iovec_num,sqn->vec);
-
-  // After we have finished searching we return this iovec back to 
-  // For safety we make sure to zero out the data before returning to free list
-  memset(sqn->file_name, 0, MAX_FILE_NAME);
-  memset(sqn->vec->iov_base, 0, sqn->vec->iov_len);
 
   struct queue* free_node = queue_create_node(sqn,sizeof(struct search_queue_node));
   return free_node;
@@ -192,6 +189,8 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
     return -1;
   }
 
+	posix_fadvise(fd,0,0,POSIX_FADV_SEQUENTIAL|POSIX_FADV_NOREUSE);
+
   int total_bytes = file_info.st_size;  
   int iovecs_to_read = (int)ceil((double)total_bytes/(1.0*IOVEC_LEN));
 
@@ -202,7 +201,6 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
 	int  i = 0;
 	while(cur!=NULL){
 		sqn[i] = assignable_nodes->data;
-
     strncpy(sqn[i]->file_name,file,MAX_FILE_NAME);
     sqn[i]->file_name_len = strlen(file);
     sqn[i]->iovec_num = i;
@@ -215,6 +213,7 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
     return 0;
   }
   
+
   struct iovec buffers[iovecs_to_read];
   // Assign base address from nodes gotten from free list
   for(i = 0;i < iovecs_to_read; i++){
@@ -229,6 +228,7 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
   queue_prepend_all_list(search_queue, assignable_nodes);    
 
   fprintf(stderr,"Read file [%s] \n%d bytes num iovecs %d \n",file,bytes_read,iovecs_to_read);
+
   close(fd);
 
   return bytes_read;

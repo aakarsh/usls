@@ -43,7 +43,7 @@ struct queue_head* queue_new() {
   q->head = NULL;
   q->size = 0;
   q->finish_filling = 0;
-	q->free_data = NULL;
+  q->free_data = NULL;
   pthread_mutex_init(&q->lock, NULL);
   pthread_cond_init(&q->modified_cv, NULL);
   return q;  
@@ -59,17 +59,18 @@ int queue_destroy(struct queue_head* q) {
       //TODO free data
       //fprintf(stderr,"Trying to free [%p] \n",tmp->data);
       //TODO some pointers are looking at stale buffers?
-			/**
-			if(q->free_data!=NULL) {
-				fprintf(stderr,"queue_destroy : free_data of len  %d \n", tmp->data_len);
-				 q->free_data(tmp->data);				 
-			}
-			*/
+
+      /* if(q->free_data!=NULL) {
+       *   fprintf(stderr,"queue_destroy : free_data of len  %d \n", tmp->data_len);
+       *   q->free_data(tmp->data);        
+       * } */
+
       //fprintf(stderr,"Finished free [%p] \n",tmp->data);
     }
     free(tmp);
     cur = cur->next;    
   }
+  
   q->size = 0;
   pthread_cond_init(&q->modified_cv, NULL);
   pthread_mutex_unlock(&q->lock);
@@ -97,16 +98,16 @@ void queue_prepend_one(struct queue_head* q , void* node, int node_sz) {
 void queue_prepend_all_list(struct queue_head* q , struct queue* node_list){
   pthread_mutex_lock(&q->lock);
 
-	struct queue* last = NULL;
-	struct queue* cur = node_list;
-	int sz = 0;
-	while(cur!=NULL) {
-		last = cur;
-		cur = cur->next;
-		sz++;
-	}
+  struct queue* last = NULL;
+  struct queue* cur = node_list;
+  int sz = 0;
+  while(cur!=NULL) {
+    last = cur;
+    cur = cur->next;
+    sz++;
+  }
 
-	last->next = q->head;
+  last->next = q->head;
 
   q->head = node_list;
   q->size += sz;
@@ -163,17 +164,17 @@ struct queue* queue_take(struct queue_head* queue, int n)
   struct queue * last = NULL;
   struct queue * cur = queue->head; 
 
-	struct queue* retval = cur;
+  struct queue* retval = cur;
 
  // what about the previous cur check
   while(i < n && cur!=NULL) {
-		last = cur;
+    last = cur;
     cur = cur->next;
     i++;
-  }	
+  } 
 
-	// unlink last node
-	last->next = NULL;
+  // unlink last node
+  last->next = NULL;
 
   queue->head = cur;
   queue->size = queue->size - n;
@@ -198,7 +199,7 @@ void* run_queue_tranformer(void* arg) {
   struct queue_transformer_arg* qarg = (struct queue_transformer_arg*) arg;
 
   while(1) {
-		struct queue* msg = queue_take(qarg->in_q,1);
+    struct queue* msg = queue_take(qarg->in_q,1);
 
     if(msg == NULL) { // done
       fprintf(stderr,"Stopping %s %d end\n",qarg->name,qarg->id);
@@ -229,13 +230,14 @@ struct transformer_info* start_tranformers(char* name,
                              struct queue_head* out_q, 
                              int n)
 {
-	struct transformer_info* info = malloc(sizeof(struct transformer_info));
-	info->num_threads = n;
+  struct transformer_info* info = malloc(sizeof(struct transformer_info));
+  info->num_threads = n;
   info->thread_ids = malloc(sizeof(pthread_t)* n);
-	info->args = malloc(sizeof (struct queue_transformer_arg) *n);
+  info->args = malloc(sizeof (struct queue_transformer_arg) *n);
   int i;
+
   for(i = 0 ; i < n; i++) {
-		struct queue_transformer_arg* args = info->args;
+    struct queue_transformer_arg* args = info->args;
     strncpy(args[i].name,name,19);
     args[i].id = i;
     args[i].in_q = in_q;
@@ -258,7 +260,7 @@ void join_transformers(struct transformer_info* tr) {
 
 
 void free_transformers(struct transformer_info* tr){
-	free(tr->args);
-	free(tr->thread_ids);
-	free(tr);
+  free(tr->args);
+  free(tr->thread_ids);
+  free(tr);
 }
