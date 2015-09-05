@@ -151,23 +151,23 @@ void search_buffer (int thread_id, const char* file_name,
 }
 
 struct queue* file_reader_tranform(void* obj, int id,void* priv, struct queue_head* out_q) {
-  char* file = (char*)  obj;
+  char* file = obj;
   search_queue_add(file,out_q);
   return NULL;
 }
 
 struct queue* search_transform(void* obj, int id, void* priv,struct queue_head* oq) {
 	
-  struct search_queue_node* sqn = (struct search_queue_node*) obj;
-  char*  search_term = (char*) priv;
+  struct search_queue_node* sqn = obj;
+  char*  search_term =  priv;
 
   fprintf(stderr,"Call search_transform [%s] on file %s \n",
           search_term,sqn->file_name);
 
   search_buffer(id,sqn->file_name,search_term,sqn->iovec_num,sqn->vec);
 
-  struct queue* free_node = queue_create_node(sqn,sizeof(struct search_queue_node));
-  return free_node;
+  return queue_create_node(sqn,sizeof(struct search_queue_node));
+  
 }
 
 

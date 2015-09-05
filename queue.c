@@ -39,7 +39,7 @@ struct queue* queue_create_node(void* data, int data_len) {
 }
 
 struct queue_head* queue_new() {
-  struct queue_head* q =  (struct queue_head*) malloc (sizeof(struct queue_head));
+  struct queue_head* q =  malloc (sizeof(struct queue_head));
   q->head = NULL;
   q->size = 0;
   q->finish_filling = 0;
@@ -196,7 +196,7 @@ struct queue* queue_take(struct queue_head* queue, int n)
  */
 void* run_queue_tranformer(void* arg) {
 
-  struct queue_transformer_arg* qarg = (struct queue_transformer_arg*) arg;
+  struct queue_transformer_arg* qarg = arg;
 
   while(1) {
     struct queue* msg = queue_take(qarg->in_q,1);
