@@ -1,4 +1,4 @@
-/* -*- Mode: c; tab-width: 2; indent-tabs-mode: 0; c-basic-offset: 2; -*- */
+/* -*- Mode: c; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2; -*- */
 
 #include <math.h>
 #include <assert.h>
@@ -155,7 +155,7 @@ struct queue* file_reader_tranform(void* file, int id,void* priv, struct queue_h
 }
 
 struct queue* search_transform(void* obj, int id, void* priv,struct queue_head* oq) {
-	
+  
   struct search_queue_node* sqn = obj;
   char*  search_term =  priv;
 
@@ -187,27 +187,27 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
     return -1;
   }
 
-	posix_fadvise(fd,0,0,POSIX_FADV_SEQUENTIAL|POSIX_FADV_NOREUSE);
+  posix_fadvise(fd,0,0,POSIX_FADV_SEQUENTIAL|POSIX_FADV_NOREUSE);
 
   int total_bytes = file_info.st_size;  
   int iovecs_to_read = (int)ceil((double)total_bytes/(1.0*IOVEC_LEN));
 
   struct queue*  assignable_nodes =  queue_take(free_iovec_queue, iovecs_to_read);
 
-	struct search_queue_node*  sqn[iovecs_to_read];
-	struct queue* cur = assignable_nodes;
+  struct search_queue_node*  sqn[iovecs_to_read];
+  struct queue* cur = assignable_nodes;
 
-	int  i = 0;
-	while(cur!=NULL){
-		sqn[i] = assignable_nodes->data;
+  int  i = 0;
+  while(cur!=NULL){
+    sqn[i] = assignable_nodes->data;
     strncpy(sqn[i]->file_name,file,MAX_FILE_NAME);
     sqn[i]->file_name_len = strlen(file);
     sqn[i]->iovec_num = i;
 
-		cur = cur->next;
-		i++;
-	}
-		
+    cur = cur->next;
+    i++;
+  }
+    
   if(sqn == NULL){    
     return 0;
   }
@@ -216,7 +216,7 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
   struct iovec buffers[iovecs_to_read];
   // Assign base address from nodes gotten from free list
   for(i = 0;i < iovecs_to_read; i++){
-		// also populate list
+    // also populate list
     buffers[i].iov_base = sqn[i]->vec->iov_base;
     buffers[i].iov_len = sqn[i]->vec->iov_len;
   }
@@ -288,7 +288,7 @@ int main(int argc,char * argv[])
 
   // Initialize Free Queue
   free_iovec_queue = create_iovec_queue(FREE_QUEUE_SIZE,IOVEC_LEN);
-	free_iovec_queue->free_data = free;
+  free_iovec_queue->free_data = free;
 
   // Initiazlie a Search Queue
   search_queue = queue_new();
@@ -353,12 +353,12 @@ int main(int argc,char * argv[])
   fprintf(stderr,"Waiting for searchers");
   join_transformers(searchers);
 
-	
-	free_transformers(searchers);
-	free_transformers(readers);
+  
+  free_transformers(searchers);
+  free_transformers(readers);
 
   queue_destroy(search_queue);
-	queue_destroy(file_queue);
+  queue_destroy(file_queue);
   queue_destroy(free_iovec_queue);
 
   return 0;
