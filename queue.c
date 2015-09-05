@@ -94,6 +94,27 @@ void queue_prepend_one(struct queue_head* q , void* node, int node_sz) {
   queue_prepend_all(q,node,node_sz,1);
 }
 
+void queue_prepend_all_list(struct queue_head* q , struct queue* node_list){
+  pthread_mutex_lock(&q->lock);
+
+	struct queue* last = NULL;
+	struct queue* cur = node_list;
+	int sz = 0;
+	while(cur!=NULL) {
+		last = cur;
+		cur = cur->next;
+		sz++;
+	}
+
+	last->next = q->head;
+
+  q->head = node_list;
+  q->size += sz;
+  pthread_cond_signal(&q->modified_cv);
+  pthread_mutex_unlock(&q->lock);
+}
+
+
 void queue_prepend_all(struct queue_head* q , void* data, int node_sz,int n) {
   int i = 0;
   for (i = 0 ; i < n; i++) {
@@ -124,7 +145,9 @@ void queue_mark_finish_filling(struct queue_head* list){
  * Try to take n items from queue if possible, blocking if for more
  * items if not possible.
  */
-void* queue_take(struct queue_head* queue, int n) {
+struct queue* queue_take(struct queue_head* queue, int n) 
+{
+
   int i = 0;
   pthread_mutex_lock(&queue->lock);
 
@@ -137,30 +160,32 @@ void* queue_take(struct queue_head* queue, int n) {
     }
   }
 
+  struct queue * last = NULL;
   struct queue * cur = queue->head; 
-  int first_size = cur->data_len; 
 
-  // Assumes items fit in n*first_size
-  void* retval = malloc(n*first_size);
+	struct queue* retval = cur;
 
-  while(i < n && cur!=NULL) { // what about the previous cur check
-    int item_size = cur->data_len;
-		//TODO this is a WASTE
-		// We should just return the linked list
-    memcpy(retval+(i*item_size),cur->data,item_size);
-    struct queue * next = cur->next;
-		//free(cur->data);
-    free(cur);
-    cur = next;
+ // what about the previous cur check
+  while(i < n && cur!=NULL) {
+		last = cur;
+    cur = cur->next;
     i++;
-  }
+  }	
+
+	// unlink last node
+	last->next = NULL;
 
   queue->head = cur;
   queue->size = queue->size - n;
+
   pthread_mutex_unlock(&queue->lock);
 
   return retval;
 }
+
+
+
+
 
 /**
  * Simple function which will keep running until we receive a NULL
@@ -173,12 +198,14 @@ void* run_queue_tranformer(void* arg) {
   struct queue_transformer_arg* qarg = (struct queue_transformer_arg*) arg;
 
   while(1) {
-    void* obj = queue_take(qarg->in_q,1);
-    if(obj == NULL) { // done
+		struct queue* msg = queue_take(qarg->in_q,1);
+
+    if(msg == NULL) { // done
       fprintf(stderr,"Stopping %s %d end\n",qarg->name,qarg->id);
       return NULL;
     }
     
+    void* obj = msg->data;
     fprintf(stderr,"Running  %s:%d \n",qarg->name,qarg->id);
 
     struct queue* node = qarg->transform(obj,qarg->id,qarg->priv,qarg->out_q);  

@@ -25,8 +25,11 @@ int queue_destroy(struct queue_head* q);
 struct queue_head* queue_new() ;
 
 void queue_mark_finish_filling(struct queue_head* list);
-void* queue_take(struct queue_head* queue, int n);
 
+struct queue* queue_take(struct queue_head* queue, int n) ;
+
+
+void queue_prepend_all_list(struct queue_head* q , struct queue* node_list);
 void queue_prepend_one(struct queue_head* list , void* node, int node_sz);
 void queue_prepend_all(struct queue_head* list , void* node, int node_sz,int n);
 void queue_prepend(struct queue_head* list , struct queue* node) ;

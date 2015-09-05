@@ -153,8 +153,6 @@ void search_buffer (int thread_id, const char* file_name,
 struct queue* file_reader_tranform(void* obj, int id,void* priv, struct queue_head* out_q) {
   char* file = (char*)  obj;
   search_queue_add(file,out_q);
-	// free retreived object
-	free(file);
   return NULL;
 }
 
@@ -197,31 +195,38 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
   int total_bytes = file_info.st_size;  
   int iovecs_to_read = (int)ceil((double)total_bytes/(1.0*IOVEC_LEN));
 
-  struct search_queue_node*  sqn = (struct search_queue_node*) queue_take(free_iovec_queue, iovecs_to_read);
+  struct queue*  assignable_nodes =  queue_take(free_iovec_queue, iovecs_to_read);
 
+	struct search_queue_node*  sqn[iovecs_to_read];
+	struct queue* cur = assignable_nodes;
+	int  i = 0;
+	while(cur!=NULL){
+		sqn[i] = assignable_nodes->data;
+
+    strncpy(sqn[i]->file_name,file,MAX_FILE_NAME);
+    sqn[i]->file_name_len = strlen(file);
+    sqn[i]->iovec_num = i;
+
+		cur = cur->next;
+		i++;
+	}
+		
   if(sqn == NULL){    
     return 0;
   }
-  int i = 0;
   
   struct iovec buffers[iovecs_to_read];
   // Assign base address from nodes gotten from free list
   for(i = 0;i < iovecs_to_read; i++){
-    buffers[i].iov_base = sqn[i].vec->iov_base;
-    buffers[i].iov_len = sqn[i].vec->iov_len;
+		// also populate list
+    buffers[i].iov_base = sqn[i]->vec->iov_base;
+    buffers[i].iov_len = sqn[i]->vec->iov_len;
   }
   
   // gather all files blocks that can be read into buffers
   int bytes_read = readv(fd, buffers , iovecs_to_read);
 
-  // Overwite previous search data 
-  for(i = 0; i < iovecs_to_read; i++){
-    strncpy(sqn[i].file_name,file,MAX_FILE_NAME);
-    sqn[i].file_name_len = strlen(file);
-    sqn[i].iovec_num = i;
-  }
-
-  queue_prepend_all(search_queue, sqn ,sizeof(struct search_queue_node),iovecs_to_read);    
+  queue_prepend_all_list(search_queue, assignable_nodes);    
 
   fprintf(stderr,"Read file [%s] \n%d bytes num iovecs %d \n",file,bytes_read,iovecs_to_read);
   close(fd);
