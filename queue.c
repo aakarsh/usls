@@ -173,8 +173,9 @@ struct queue* queue_take(struct queue_head* queue, int n)
     i++;
   } 
 
-  // unlink last node
-  last->next = NULL;
+  // unlink last nod
+  if(last!=NULL)
+    last->next = NULL;
 
   queue->head = cur;
   queue->size = queue->size - n;
@@ -234,9 +235,9 @@ struct transformer_info* start_tranformers(char* name,
   info->num_threads = n;
   info->thread_ids = malloc(sizeof(pthread_t)* n);
   info->args = malloc(sizeof (struct queue_transformer_arg) *n);
-  int i;
 
-  for(i = 0 ; i < n; i++) {
+
+  for(int i = 0 ; i < n; i++) {
     struct queue_transformer_arg* args = info->args;
     strncpy(args[i].name,name,19);
     args[i].id = i;
@@ -253,8 +254,7 @@ struct transformer_info* start_tranformers(char* name,
 }
 
 void join_transformers(struct transformer_info* tr) {
-  int i;
-  for(i = 0; i < tr->num_threads;i++)
+  for(int i = 0; i < tr->num_threads;i++)
     pthread_join(tr->thread_ids[i],NULL);     
 }
 

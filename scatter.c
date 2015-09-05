@@ -63,10 +63,9 @@ struct queue_head* create_iovec_queue(int nblks ,int block_size) {
 
   // Create list of empty iovec's
   struct search_queue_node* sqn = malloc(nblks*sizeof(struct search_queue_node));
-  struct iovec* vec = malloc(nblks*sizeof(struct iovec));
-  
-  int i;
-  for(i = 0 ; i < nblks;  i++) {
+  struct iovec* vec = malloc(nblks*sizeof(struct iovec));  
+
+  for(int i = 0 ; i < nblks;  i++) {
     vec[i].iov_base = malloc(block_size);
     vec[i].iov_len = block_size;
     sqn[i].vec = vec + i;
@@ -150,8 +149,7 @@ void search_buffer (int thread_id, const char* file_name,
   }
 }
 
-struct queue* file_reader_tranform(void* obj, int id,void* priv, struct queue_head* out_q) {
-  char* file = obj;
+struct queue* file_reader_tranform(void* file, int id,void* priv, struct queue_head* out_q) {
   search_queue_add(file,out_q);
   return NULL;
 }
@@ -198,6 +196,7 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
 
 	struct search_queue_node*  sqn[iovecs_to_read];
 	struct queue* cur = assignable_nodes;
+
 	int  i = 0;
 	while(cur!=NULL){
 		sqn[i] = assignable_nodes->data;
@@ -284,8 +283,8 @@ int main(int argc,char * argv[])
     return -1;
   }
 
-  int num_readers = 1;
-  int num_searchers = 3;
+  int num_readers = 2;
+  int num_searchers = 2;
 
   // Initialize Free Queue
   free_iovec_queue = create_iovec_queue(FREE_QUEUE_SIZE,IOVEC_LEN);
@@ -307,6 +306,7 @@ int main(int argc,char * argv[])
       if(filename[l-1] == '\n') {
         filename[l-1] = '\0';
       }
+
       char* f = strdup(filename);
       int fl = strlen(f);
       struct queue* node = queue_create_node(f,fl+1);
@@ -356,10 +356,10 @@ int main(int argc,char * argv[])
 	
 	free_transformers(searchers);
 	free_transformers(readers);
+
   queue_destroy(search_queue);
 	queue_destroy(file_queue);
   queue_destroy(free_iovec_queue);
-  //free(searcher_id);
 
   return 0;
 }

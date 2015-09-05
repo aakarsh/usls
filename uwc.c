@@ -108,10 +108,10 @@ int main(int argc,char * argv[])
   if(optind >= argc){
     wc_cmd(stdin,&config,&res);    
   } else {
-    int i ;
+    
     struct wc_result total;
     clear_result(&total);
-    for(i = optind; i < argc; i++){
+    for(int i = optind; i < argc; i++){
       char* file_name = argv[i];
       FILE* str;
       if(strcmp(file_name,"-") == 0)
