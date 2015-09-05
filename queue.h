@@ -8,6 +8,7 @@ struct queue {
   struct queue* next;
 };
 
+typedef void (*queue_free_data)(void *ptr);
 
 struct queue_head{
   struct queue* head;
@@ -15,6 +16,7 @@ struct queue_head{
   int finish_filling;
   pthread_cond_t modified_cv;
   pthread_mutex_t lock;
+  queue_free_data free_data;
 };
 
 struct queue* queue_create_node(void* data, int data_len);
@@ -42,7 +44,18 @@ struct queue_transformer_arg {
    void* priv; 
 };
 
+struct transformer_info {
+  pthread_t* thread_ids;
+  struct queue_transformer_arg* args;
+  int num_threads;
+};
 
+struct transformer_info* start_tranformers(char* name,
+                             queue_transformer transform,void* priv, 
+                             struct queue_head* in_q, 
+                             struct queue_head* out_q, 
+                                           int n);
 
-pthread_t* start_tranformers(char* name,queue_transformer transform,void* priv, struct queue_head* in_q, struct queue_head* out_q, int n);
-void join_transformers(pthread_t* id , int n);
+void join_transformers(struct transformer_info* tr);
+
+void free_transformers(struct transformer_info* tr);

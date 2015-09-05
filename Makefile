@@ -14,8 +14,8 @@ scat: scatter.c  queue.h queue.c
 	cp bin/* ~/bin
 	global -u
 
-vscat: scat
-	valgrind --tool=memcheck --leak-check=yes --show-reachable=yes --num-callers=20 --track-fds=yes ./bin/scat Eggert - <./bin/emacs.out 
+valgrind: scat
+	valgrind --tool=memcheck --leak-check=yes --show-reachable=yes --num-callers=20 --track-fds=yes ./bin/scat Eggert - < ./bin/emacs.out 2>&1  > gen/v.out
 
 uwc: uwc.c 
 	gcc $(CFLAGS) -g -Wall $(INCLUDE_FLAGS) -o bin/uwc uwc.c

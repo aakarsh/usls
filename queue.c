@@ -43,6 +43,7 @@ struct queue_head* queue_new() {
   q->head = NULL;
   q->size = 0;
   q->finish_filling = 0;
+	q->free_data = NULL;
   pthread_mutex_init(&q->lock, NULL);
   pthread_cond_init(&q->modified_cv, NULL);
   return q;  
@@ -58,7 +59,12 @@ int queue_destroy(struct queue_head* q) {
       //TODO free data
       //fprintf(stderr,"Trying to free [%p] \n",tmp->data);
       //TODO some pointers are looking at stale buffers?
-      //free(tmp->data);
+			/**
+			if(q->free_data!=NULL) {
+				fprintf(stderr,"queue_destroy : free_data of len  %d \n", tmp->data_len);
+				 q->free_data(tmp->data);				 
+			}
+			*/
       //fprintf(stderr,"Finished free [%p] \n",tmp->data);
     }
     free(tmp);
@@ -183,23 +189,23 @@ void* run_queue_tranformer(void* arg) {
   return NULL;
 }
 
-
 /**
  * Starts n threads which will work take items from input queue and
  * move to output queue after performing a transform
  */
-pthread_t* start_tranformers(char* name,
+struct transformer_info* start_tranformers(char* name,
                              queue_transformer transform,void* priv, 
                              struct queue_head* in_q, 
                              struct queue_head* out_q, 
-                             int n){
-
-  pthread_t* transformer_id = malloc(sizeof(pthread_t)* n);
-  struct queue_transformer_arg* args = malloc(sizeof (struct queue_transformer_arg) *n);
-
+                             int n)
+{
+	struct transformer_info* info = malloc(sizeof(struct transformer_info));
+	info->num_threads = n;
+  info->thread_ids = malloc(sizeof(pthread_t)* n);
+	info->args = malloc(sizeof (struct queue_transformer_arg) *n);
   int i;
   for(i = 0 ; i < n; i++) {
-
+		struct queue_transformer_arg* args = info->args;
     strncpy(args[i].name,name,19);
     args[i].id = i;
     args[i].in_q = in_q;
@@ -209,13 +215,20 @@ pthread_t* start_tranformers(char* name,
 
     fprintf(stderr,"Creating thread %s:%d %p %p \n",args[i].name,args[i].id, 
            args[i].in_q,args[i].out_q);
-    pthread_create(&transformer_id[i],NULL,run_queue_tranformer,&(args[i]));
+    pthread_create(&info->thread_ids[i],NULL,run_queue_tranformer,&(args[i]));
   }
-  return transformer_id;
+  return info;
 }
 
-void join_transformers(pthread_t* id , int n) {
+void join_transformers(struct transformer_info* tr) {
   int i;
-  for(i = 0; i < n;i++)
-    pthread_join(id[i],NULL);     
+  for(i = 0; i < tr->num_threads;i++)
+    pthread_join(tr->thread_ids[i],NULL);     
+}
+
+
+void free_transformers(struct transformer_info* tr){
+	free(tr->args);
+	free(tr->thread_ids);
+	free(tr);
 }
