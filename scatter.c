@@ -174,6 +174,7 @@ struct queue* search_transform(void* obj, int id, void* priv,struct queue_head* 
  * Reads a file and appends it to the search list
  */
 int search_queue_add(char* file, struct queue_head* search_queue) {
+  int bytes_read = 0;
   int fd = open(file, O_RDONLY);
   if(fd < 0){
     fprintf(stderr,"Couldn't open file [%s] \n", file);
@@ -190,6 +191,10 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
   posix_fadvise(fd,0,0,POSIX_FADV_SEQUENTIAL|POSIX_FADV_NOREUSE);
 
   int total_bytes = file_info.st_size;  
+  if(total_bytes == 0) {
+    close(fd);
+    return total_bytes;
+  }
   int iovecs_to_read = (int)ceil((double)total_bytes/(1.0*IOVEC_LEN));
 
   struct queue*  assignable_nodes =  queue_take(free_iovec_queue, iovecs_to_read);
@@ -197,7 +202,7 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
   struct search_queue_node*  sqn[iovecs_to_read];
   struct queue* cur = assignable_nodes;
 
-  int  i = 0;
+  long long  i = 0;
   while(cur!=NULL){
     sqn[i] = assignable_nodes->data;
     strncpy(sqn[i]->file_name,file,MAX_FILE_NAME);
@@ -222,11 +227,12 @@ int search_queue_add(char* file, struct queue_head* search_queue) {
   }
   
   // gather all files blocks that can be read into buffers
-  int bytes_read = readv(fd, buffers , iovecs_to_read);
+  bytes_read = readv(fd, buffers , iovecs_to_read);
 
   queue_prepend_all_list(search_queue, assignable_nodes);    
 
   fprintf(stderr,"Read file [%s] \n%d bytes num iovecs %d \n",file,bytes_read,iovecs_to_read);
+
 
   close(fd);
 
@@ -264,27 +270,107 @@ void recursive_add_files(char* dir_path, struct queue_head* file_queue){
 
 }
 
-int main(int argc,char * argv[])
+struct config cfg;
+
+enum path_type {
+  path_type_dir,
+  path_type_file,
+  path_type_stdin
+};
+  
+
+struct config 
 {
+  char* search_term;
+  char* path;
+  int num_readers;
+  int num_searchers;
+  int debug;
+  enum path_type path_type;
+};
+
+int get_num_processors(){
   int num_processors = 1;
 
-  if(argc < 3) {
+  if((num_processors = sysconf(_SC_NPROCESSORS_ONLN)) < 0){
+    fprintf(stderr,"Couldnt get number of processors assuming single processor  %d \n",errno);
+    return 1;
+  }  
+  return num_processors;
+}
+
+void config_init(struct config* cfg){
+  int num_processors = get_num_processors();
+
+  cfg->search_term = NULL;
+  cfg->path = NULL;
+  cfg->num_searchers= num_processors;
+  cfg->num_readers = num_processors;
+  cfg->debug = 0; //default debug level
+  cfg->path_type = path_type_file;
+}
+
+char* program_name;
+void usage(FILE* stream, int exit_code);
+
+
+int main(int argc,char * argv[])
+{
+  program_name = argv[0];
+  
+  struct config cfg;
+  config_init(&cfg);
+
+  const char* short_options = "r:s:D:";
+  const struct option long_options[] = {
+    {"num-readers",1,NULL,'r'},
+    {"num-searchers",1,NULL,'s'},
+    {"debug",1,NULL,'D'}};
+
+  int next_opt = false;
+  extern int optind;
+  extern char *optarg;
+  do {
+    next_opt = getopt_long(argc,argv,
+                           short_options,long_options, NULL);
+
+    switch(next_opt){
+    case 'r':
+      cfg.num_readers = atoi(optarg);
+      break;
+    case 's':
+      cfg.num_searchers = atoi(optarg);
+      break;
+    case 'D':
+      cfg.debug = atoi(optarg);
+      break;
+    case '?': // usage
+      usage(stderr,0);
+    case -1:
+      break;
+    default:
+      printf("unexpected exit");
+      abort();
+    }
+  } while (next_opt != -1);  
+
+
+
+  int remaining_args = argc - optind;
+    
+  if( remaining_args < 2) {
     fprintf(stderr, "Usage: %s [search_term] [file_name] \n",argv[0]);
     return -1;
   }
+  
+  char* search_term = argv[optind];
+  char* read_from = argv[optind+1];
 
-  if(strlen(argv[1]) > MAX_SEARCH_TERM_LEN) {
-    fprintf(stderr,"search term %s is longer than %d \n",argv[1],MAX_SEARCH_TERM_LEN);
+  if(strlen(search_term) > MAX_SEARCH_TERM_LEN) {
+    fprintf(stderr,"search term %s is longer than %d \n",search_term,MAX_SEARCH_TERM_LEN);
     return -1;
   }
 
-  if((num_processors = sysconf(_SC_NPROCESSORS_ONLN)) < 0){
-    fprintf(stderr,"Couldnt get number of processors  %d \n",errno);
-    return -1;
-  }
-
-  int num_readers = 2;
-  int num_searchers = 2;
 
   // Initialize Free Queue
   free_iovec_queue = create_iovec_queue(FREE_QUEUE_SIZE,IOVEC_LEN);
@@ -294,9 +380,11 @@ int main(int argc,char * argv[])
   search_queue = queue_new();
 
   struct queue_head* file_queue = queue_new();
+  
+
 
   // add files to file_queue
-  if(strcmp(argv[2],"-") == 0) { // read a list of files from stdin
+  if(strcmp(read_from,"-") == 0) { // read a list of files from stdin
     char* filename = NULL;
     size_t sz = 1024;
     while(getline(&filename,&sz,stdin) > 0 ) {      
@@ -314,16 +402,16 @@ int main(int argc,char * argv[])
     }
   } else{
     struct stat file_info;
-    if(stat(argv[2],&file_info)!=0) {
-      fprintf(stderr, "Couldnt locate file %s\n",argv[2]);
+    if(stat(read_from,&file_info)!=0) {
+      fprintf(stderr, "Couldnt locate file %s\n",read_from);
       perror("fstat");
       return -1;
     }
 
     if(S_ISDIR(file_info.st_mode)){
-      recursive_add_files(argv[2],file_queue);
+      recursive_add_files(read_from,file_queue);
     } else {    //regular file
-      struct queue* node = queue_create_node(argv[2],strlen(argv[2])+1);
+      struct queue* node = queue_create_node(read_from,strlen(read_from)+1);
       queue_prepend(file_queue,node);
     }
   }
@@ -333,11 +421,11 @@ int main(int argc,char * argv[])
 
   struct transformer_info* readers = 
     start_tranformers("reader",file_reader_tranform,NULL,
-                      file_queue,search_queue,num_readers);
+                      file_queue,search_queue,cfg.num_readers);
 
   struct transformer_info* searchers = 
-    start_tranformers("searcher",search_transform,argv[1],
-                       search_queue,free_iovec_queue,num_searchers);
+    start_tranformers("searcher",search_transform,search_term,
+                       search_queue,free_iovec_queue,cfg.num_searchers);
   
   fprintf(stderr,"Waiting for readers\n");
   join_transformers(readers);
@@ -362,4 +450,30 @@ int main(int argc,char * argv[])
   queue_destroy(free_iovec_queue);
 
   return 0;
+}
+
+
+void usage(FILE* stream, int exit_code)
+{
+  fprintf(stream,"Usage: %s  [search_term] [file/dir] \n",program_name);
+
+  struct description{
+    char* short_option;
+    char* long_option;
+    char* description;
+  };
+  
+  const struct description desc_arr[] = {
+    {"-r[n]","--num-readers","Number of reader threads to use"},
+    {"-s[n]","--num-searchers","Number of searcher threads to use"},
+  };
+
+  int i = 0;
+  for(i = 0 ; i < 2;i++) {
+    fprintf(stream,"%-10s%-14s\t%-10s\n"
+            ,desc_arr[i].short_option
+            ,desc_arr[i].long_option
+            ,desc_arr[i].description);                
+  }
+  exit(exit_code);
 }

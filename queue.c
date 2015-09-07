@@ -148,7 +148,7 @@ void queue_mark_finish_filling(struct queue_head* list){
  */
 struct queue* queue_take(struct queue_head* queue, int n) 
 {
-
+	assert(n>0);
   int i = 0;
   pthread_mutex_lock(&queue->lock);
 
@@ -174,8 +174,7 @@ struct queue* queue_take(struct queue_head* queue, int n)
   } 
 
   // unlink last nod
-  if(last!=NULL)
-    last->next = NULL;
+	last->next = NULL;
 
   queue->head = cur;
   queue->size = queue->size - n;
