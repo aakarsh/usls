@@ -220,6 +220,15 @@ void* run_queue_tranformer(void* arg) {
   return NULL;
 }
 
+
+void* run_queue_producer(void* arg) {
+  struct queue_transformer_arg* qarg = arg;
+	qarg->transform(NULL,qarg->id,qarg->priv,qarg->out_q);    
+
+  return NULL;
+}
+
+
 /**
  * Starts n threads which will work take items from input queue and
  * move to output queue after performing a transform
@@ -235,8 +244,8 @@ struct transformer_info* start_tranformers(char* name,
   info->thread_ids = malloc(sizeof(pthread_t)* n);
   info->args = malloc(sizeof (struct queue_transformer_arg) *n);
 
-
-  for(int i = 0 ; i < n; i++) {
+	if(in_q == NULL) {// pure producer thread does not use an input queue 
+		int i = 0;
     struct queue_transformer_arg* args = info->args;
     strncpy(args[i].name,name,19);
     args[i].id = i;
@@ -245,10 +254,24 @@ struct transformer_info* start_tranformers(char* name,
     args[i].transform = transform;
     args[i].priv = priv;
 
-    fprintf(stderr,"Creating thread %s:%d %p %p \n",args[i].name,args[i].id, 
-           args[i].in_q,args[i].out_q);
-    pthread_create(&info->thread_ids[i],NULL,run_queue_tranformer,&(args[i]));
-  }
+		pthread_create(&info->thread_ids[0],NULL,run_queue_producer, &(args[i]));
+
+	}  else {
+		for(int i = 0 ; i < n; i++) {
+			struct queue_transformer_arg* args = info->args;
+			strncpy(args[i].name,name,19);
+			args[i].id = i;
+			args[i].in_q = in_q;
+			args[i].out_q = out_q;
+			args[i].transform = transform;
+			args[i].priv = priv;
+
+			fprintf(stderr,"Creating thread %s:%d %p %p \n",args[i].name,args[i].id, 
+							args[i].in_q,args[i].out_q);
+			pthread_create(&info->thread_ids[i],NULL,run_queue_tranformer,&(args[i]));
+		}
+	}
+
   return info;
 }
 

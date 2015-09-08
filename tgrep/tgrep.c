@@ -51,11 +51,11 @@ struct search_queue_node {
   struct iovec* vec;  
 };
 
-struct queue_head* search_queue = NULL;
+
 
 int search_queue_add(char* file, struct queue_head* search_queue);
 struct queue_head* create_iovec_queue(int nblks ,int block_size);
-
+void recursive_add_files(char* dir_path, struct queue_head* file_queue);
 
 struct queue_head* create_iovec_queue(int nblks ,int block_size) {
 
@@ -147,6 +147,50 @@ void search_buffer (int thread_id, const char* file_name,
     loop_count++;
 
   }
+}
+
+
+struct queue* file_path_reader_transform(void* obj, int id, void* priv, struct queue_head* file_queue)
+{
+
+  char* read_from = priv;
+  // add files to file_queue
+  if(strcmp(read_from,"-") == 0) { // read a list of files from stdin
+    char* filename = NULL;
+    size_t sz = 1024;
+    while(getline(&filename,&sz,stdin) > 0 ) {      
+      int l = strlen(filename);
+      //  printf("file [%s] last char[%c]\n",filename,filename[l-1]);
+      //Remove new line
+      if(filename[l-1] == '\n') {
+        filename[l-1] = '\0';
+      }
+
+      char* f = strdup(filename);
+      int fl = strlen(f);
+      struct queue* node = queue_create_node(f,fl+1);
+      queue_prepend(file_queue,node);
+    }
+  } else{
+    struct stat file_info;
+    if(stat(read_from,&file_info)!=0) {
+      fprintf(stderr, "Couldnt locate file %s\n",read_from);
+      perror("fstat");
+      return NULL;
+    }
+
+    if(S_ISDIR(file_info.st_mode)){
+      recursive_add_files(read_from,file_queue);
+    } else {    //regular file
+      struct queue* node = queue_create_node(read_from,strlen(read_from)+1);
+      queue_prepend(file_queue,node);
+    }
+  }
+
+  // we are done filling this queue
+  queue_mark_finish_filling(file_queue);
+
+  return NULL;
 }
 
 struct queue* file_reader_tranform(void* file, int id,void* priv, struct queue_head* out_q) {
@@ -379,47 +423,18 @@ int main(int argc,char * argv[])
   free_iovec_queue->free_data = free;
 
   // Initiazlie a Search Queue
-  search_queue = queue_new();
+  struct queue_head*   search_queue = queue_new();
 
   struct queue_head* file_queue = queue_new();
   
 
+  //file_path_reader_transform
+  struct transformer_info* file_finder = 
+    start_tranformers("finder",file_path_reader_transform,read_from,
+                      NULL, // input  queue
+                      file_queue, // output queue
+                      1);
 
-  // add files to file_queue
-  if(strcmp(read_from,"-") == 0) { // read a list of files from stdin
-    char* filename = NULL;
-    size_t sz = 1024;
-    while(getline(&filename,&sz,stdin) > 0 ) {      
-      int l = strlen(filename);
-      //  printf("file [%s] last char[%c]\n",filename,filename[l-1]);
-      //Remove new line
-      if(filename[l-1] == '\n') {
-        filename[l-1] = '\0';
-      }
-
-      char* f = strdup(filename);
-      int fl = strlen(f);
-      struct queue* node = queue_create_node(f,fl+1);
-      queue_prepend(file_queue,node);
-    }
-  } else{
-    struct stat file_info;
-    if(stat(read_from,&file_info)!=0) {
-      fprintf(stderr, "Couldnt locate file %s\n",read_from);
-      perror("fstat");
-      return -1;
-    }
-
-    if(S_ISDIR(file_info.st_mode)){
-      recursive_add_files(read_from,file_queue);
-    } else {    //regular file
-      struct queue* node = queue_create_node(read_from,strlen(read_from)+1);
-      queue_prepend(file_queue,node);
-    }
-  }
-
-  // we are done filling this queue
-  queue_mark_finish_filling(file_queue);
 
   struct transformer_info* readers = 
     start_tranformers("reader",file_reader_tranform,NULL,
@@ -429,6 +444,9 @@ int main(int argc,char * argv[])
     start_tranformers("searcher",search_transform,search_term,
                        search_queue,free_iovec_queue,cfg.num_searchers);
   
+
+  join_transformers(file_finder);
+
   fprintf(stderr,"Waiting for readers\n");
   join_transformers(readers);
 
@@ -446,6 +464,7 @@ int main(int argc,char * argv[])
   
   free_transformers(searchers);
   free_transformers(readers);
+  free_transformers(file_finder);
 
   queue_destroy(search_queue);
   queue_destroy(file_queue);
