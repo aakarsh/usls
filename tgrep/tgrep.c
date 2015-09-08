@@ -39,8 +39,7 @@
 #define MAX_FILE_NAME 2048
 
 
-// Free from which blocks are taken and read into from files
-struct queue_head* free_iovec_queue = NULL;
+
 
 // List on which search is to conducted
 // Metadata of iovec we want to search
@@ -53,7 +52,8 @@ struct search_queue_node {
 
 
 
-int search_queue_add(char* file, struct queue_head* search_queue);
+
+int search_queue_add(char* file, struct queue_head* free_iovec_queue, struct queue_head* search_queue) ;
 struct queue_head* create_iovec_queue(int nblks ,int block_size);
 void recursive_add_files(char* dir_path, struct queue_head* file_queue);
 
@@ -193,13 +193,15 @@ struct queue* find_file_paths(void* obj, int id, void* priv, struct queue_head* 
   return NULL;
 }
 
-struct queue* file_reader_tranform(void* file, int id,void* priv, struct queue_head* in_q,struct queue_head* out_q) {
-  search_queue_add(file,out_q);
+struct queue* file_reader_tranform(void* file, int id,void* priv, struct queue_head* in_q,struct queue_head* out_q) 
+{
+  struct queue_head* free_iovec_queue = priv;
+  search_queue_add(file,free_iovec_queue,out_q);
   return NULL;
 }
 
-struct queue* search_transform(void* obj, int id, void* priv,struct queue_head* in_q,struct queue_head* oq) {
-  
+struct queue* search_transform(void* obj, int id, void* priv,struct queue_head* in_q,struct queue_head* oq) 
+{  
   struct search_queue_node* sqn = obj;
   char*  search_term =  priv;
 
@@ -217,7 +219,7 @@ struct queue* search_transform(void* obj, int id, void* priv,struct queue_head* 
 /**
  * Reads a file and appends it to the search list
  */
-int search_queue_add(char* file, struct queue_head* search_queue) {
+int search_queue_add(char* file, struct queue_head* free_iovec_queue, struct queue_head* search_queue) {
   int bytes_read = 0;
   int fd = open(file, O_RDONLY);
   if(fd < 0){
@@ -419,6 +421,8 @@ int main(int argc,char * argv[])
 
 
   // Initialize Free Queue
+  // Free from which blocks are taken and read into from files
+  struct queue_head* free_iovec_queue = NULL;
   free_iovec_queue = create_iovec_queue(FREE_QUEUE_SIZE,IOVEC_LEN);
   free_iovec_queue->free_data = free;
 
@@ -434,14 +438,13 @@ int main(int argc,char * argv[])
                       NULL,file_queue, 1);
 
   struct transformer_info* readers = 
-    start_tranformers("reader",file_reader_tranform,NULL,
+    start_tranformers("reader",file_reader_tranform,free_iovec_queue,
                       file_queue,search_queue,cfg.num_readers);
 
   struct transformer_info* searchers = 
     start_tranformers("searcher",search_transform,search_term,
                        search_queue,free_iovec_queue,cfg.num_searchers);
   
-
   join_transformers(file_finder);
 
   fprintf(stderr,"Waiting for readers\n");

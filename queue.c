@@ -173,7 +173,7 @@ struct queue* queue_take(struct queue_head* queue, int n)
     i++;
   } 
 
-  // unlink last nod
+  // unlink last node
 	last->next = NULL;
 
   queue->head = cur;
