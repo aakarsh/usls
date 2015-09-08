@@ -2,19 +2,19 @@ CFLAGS=-std=gnu99  -D_GNU_SOURCE
 INCLUDE_FLAGS= -I. -Igen/
 
 
-all: uls ucat uwc ush scat
+all: uls ucat uwc ush tgrep
 
 uls: usls.c 
 	gcc $(CFLAGS) -g -Wall $(INCLUDE_FLAGS) -o bin/uls usls.c
 	cp bin/* ~/bin
 	global -u
 
-scat: scatter.c  queue.h queue.c
-	gcc $(CFLAGS)  -g -Wall $(INCLUDE_FLAGS)  -o bin/scat queue.c queue.h scatter.c  -pthread -lm
+tgrep: tgrep/tgrep.c  queue.h queue.c
+	gcc $(CFLAGS)  -g -Wall $(INCLUDE_FLAGS)  -o bin/tgrep queue.c queue.h tgrep/tgrep.c  -pthread -lm
 	cp bin/* ~/bin
 	global -u
 
-valgrind: scat
+valgrind: tgrep
 	valgrind --tool=memcheck --leak-check=yes --show-reachable=yes --num-callers=20 --track-fds=yes ./bin/scat Eggert - < ./bin/emacs.out 2>&1  > gen/v.out
 
 uwc: uwc.c 

@@ -310,7 +310,9 @@ void config_init(struct config* cfg){
   cfg->path_type = path_type_file;
 }
 
+
 char* program_name;
+
 void usage(FILE* stream, int exit_code);
 
 
