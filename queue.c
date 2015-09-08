@@ -155,7 +155,7 @@ struct queue* queue_take(struct queue_head* queue, int n)
   while((queue->size < n)) {
     if(!queue->finish_filling)
       pthread_cond_wait(&queue->modified_cv,&queue->lock);
-    else {
+    else { 
       pthread_mutex_unlock(&queue->lock);
       return NULL;
     }
@@ -209,7 +209,7 @@ void* run_queue_tranformer(void* arg) {
     void* obj = msg->data;
     fprintf(stderr,"Running  %s:%d \n",qarg->name,qarg->id);
 
-    struct queue* node = qarg->transform(obj,qarg->id,qarg->priv,qarg->out_q);  
+    struct queue* node = qarg->transform(obj,qarg->id,qarg->priv,qarg->in_q, qarg->out_q);  
 
     if(node!=NULL && qarg->out_q !=NULL) {
       fprintf(stderr,"Prepending to %p node %p \n",qarg->out_q,node);     
@@ -223,8 +223,7 @@ void* run_queue_tranformer(void* arg) {
 
 void* run_queue_producer(void* arg) {
   struct queue_transformer_arg* qarg = arg;
-	qarg->transform(NULL,qarg->id,qarg->priv,qarg->out_q);    
-
+	qarg->transform(NULL,qarg->id,qarg->priv,qarg->in_q,qarg->out_q);    
   return NULL;
 }
 
@@ -271,7 +270,7 @@ struct transformer_info* start_tranformers(char* name,
 			pthread_create(&info->thread_ids[i],NULL,run_queue_tranformer,&(args[i]));
 		}
 	}
-
+	
   return info;
 }
 

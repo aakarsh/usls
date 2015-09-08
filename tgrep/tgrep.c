@@ -150,7 +150,7 @@ void search_buffer (int thread_id, const char* file_name,
 }
 
 
-struct queue* file_path_reader_transform(void* obj, int id, void* priv, struct queue_head* file_queue)
+struct queue* find_file_paths(void* obj, int id, void* priv, struct queue_head* in_q,struct queue_head* file_queue)
 {
 
   char* read_from = priv;
@@ -193,12 +193,12 @@ struct queue* file_path_reader_transform(void* obj, int id, void* priv, struct q
   return NULL;
 }
 
-struct queue* file_reader_tranform(void* file, int id,void* priv, struct queue_head* out_q) {
+struct queue* file_reader_tranform(void* file, int id,void* priv, struct queue_head* in_q,struct queue_head* out_q) {
   search_queue_add(file,out_q);
   return NULL;
 }
 
-struct queue* search_transform(void* obj, int id, void* priv,struct queue_head* oq) {
+struct queue* search_transform(void* obj, int id, void* priv,struct queue_head* in_q,struct queue_head* oq) {
   
   struct search_queue_node* sqn = obj;
   char*  search_term =  priv;
@@ -422,19 +422,16 @@ int main(int argc,char * argv[])
   free_iovec_queue = create_iovec_queue(FREE_QUEUE_SIZE,IOVEC_LEN);
   free_iovec_queue->free_data = free;
 
-  // Initiazlie a Search Queue
-  struct queue_head*   search_queue = queue_new();
-
+  // Queue containing file to be searched
   struct queue_head* file_queue = queue_new();
+
+  // Queue used containing buffers to be searched
+  struct queue_head*   search_queue = queue_new();
   
-
-  //file_path_reader_transform
+  //find_file_paths
   struct transformer_info* file_finder = 
-    start_tranformers("finder",file_path_reader_transform,read_from,
-                      NULL, // input  queue
-                      file_queue, // output queue
-                      1);
-
+    start_tranformers("finder",find_file_paths,read_from,
+                      NULL,file_queue, 1);
 
   struct transformer_info* readers = 
     start_tranformers("reader",file_reader_tranform,NULL,
