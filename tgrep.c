@@ -209,12 +209,8 @@ struct queue* search_transform(void* obj, int id, void* priv,struct queue_head* 
           search_term,sqn->file_name);
 
   search_buffer(id,sqn->file_name,search_term,sqn->iovec_num,sqn->vec);
-
-  return queue_create_node(sqn,sizeof(struct search_queue_node));
-  
+  return queue_create_node(sqn,sizeof(struct search_queue_node));  
 }
-
-
 
 /**
  * Reads a file and appends it to the search list
@@ -241,6 +237,7 @@ int search_queue_add(char* file, struct queue_head* free_iovec_queue, struct que
     close(fd);
     return total_bytes;
   }
+
   int iovecs_to_read = (int)ceil((double)total_bytes/(1.0*IOVEC_LEN));
 
   struct queue*  assignable_nodes =  queue_take(free_iovec_queue, iovecs_to_read);
@@ -261,10 +258,10 @@ int search_queue_add(char* file, struct queue_head* free_iovec_queue, struct que
     
   if(sqn == NULL){    
     return 0;
-  }
-  
+  }  
 
   struct iovec buffers[iovecs_to_read];
+  
   // Assign base address from nodes gotten from free list
   for(i = 0;i < iovecs_to_read; i++){
     // also populate list
@@ -402,8 +399,6 @@ int main(int argc,char * argv[])
     }
   } while (next_opt != -1);  
 
-
-
   int remaining_args = argc - optind;
     
   if( remaining_args < 2) {
@@ -419,7 +414,6 @@ int main(int argc,char * argv[])
     return -1;
   }
 
-
   // Initialize Free Queue
   // Free from which blocks are taken and read into from files
   struct queue_head* free_iovec_queue = NULL;
@@ -430,7 +424,7 @@ int main(int argc,char * argv[])
   struct queue_head* file_queue = queue_new();
 
   // Queue used containing buffers to be searched
-  struct queue_head*   search_queue = queue_new();
+  struct queue_head* search_queue = queue_new();
   
   //find_file_paths
   struct transformer_info* file_finder = 
@@ -460,7 +454,6 @@ int main(int argc,char * argv[])
   
   fprintf(stderr,"Waiting for searchers");
   join_transformers(searchers);
-
   
   free_transformers(searchers);
   free_transformers(readers);
