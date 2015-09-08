@@ -33,13 +33,33 @@
 
 #include "queue.h" 
 
-#define FREE_QUEUE_SIZE 30000
+#define FREE_IOVEC_QUEUE_SIZE 8192
 #define MAX_SEARCH_TERM_LEN 1024
-#define IOVEC_LEN 4096
+#define IOVEC_BLOCK_SIZE 4096
 #define MAX_FILE_NAME 2048
 
 
+struct config cfg;
 
+enum path_type {
+  path_type_dir,
+  path_type_file,
+  path_type_stdin
+};  
+
+struct config 
+{
+  char* search_term;
+  char* path;
+  int num_readers;
+  int num_searchers;
+  int debug;
+  int iovec_block_size;
+  int iovec_queue_size;
+  enum path_type path_type;
+};
+
+void config_init(struct config* cfg);
 
 // List on which search is to conducted
 // Metadata of iovec we want to search
@@ -49,8 +69,6 @@ struct search_queue_node {
   int iovec_num;
   struct iovec* vec;  
 };
-
-
 
 
 int search_queue_add(char* file, struct queue_head* free_iovec_queue, struct queue_head* search_queue) ;
@@ -238,7 +256,7 @@ int search_queue_add(char* file, struct queue_head* free_iovec_queue, struct que
     return total_bytes;
   }
 
-  int iovecs_to_read = (int)ceil((double)total_bytes/(1.0*IOVEC_LEN));
+  int iovecs_to_read = (int)ceil((double)total_bytes/(1.0*cfg.iovec_block_size));
 
   struct queue*  assignable_nodes =  queue_take(free_iovec_queue, iovecs_to_read);
 
@@ -313,24 +331,7 @@ void recursive_add_files(char* dir_path, struct queue_head* file_queue){
 
 }
 
-struct config cfg;
 
-enum path_type {
-  path_type_dir,
-  path_type_file,
-  path_type_stdin
-};
-  
-
-struct config 
-{
-  char* search_term;
-  char* path;
-  int num_readers;
-  int num_searchers;
-  int debug;
-  enum path_type path_type;
-};
 
 int get_num_processors(){
   int num_processors = 1;
@@ -350,7 +351,10 @@ void config_init(struct config* cfg){
   cfg->num_searchers= num_processors;
   cfg->num_readers = num_processors;
   cfg->debug = 0; //default debug level
+  cfg->iovec_block_size = IOVEC_BLOCK_SIZE;
+  cfg->iovec_queue_size = FREE_IOVEC_QUEUE_SIZE;
   cfg->path_type = path_type_file;
+
 }
 
 
@@ -362,14 +366,14 @@ void usage(FILE* stream, int exit_code);
 int main(int argc,char * argv[])
 {
   program_name = argv[0];
-  
-  struct config cfg;
   config_init(&cfg);
 
-  const char* short_options = "r:s:D:";
+  const char* short_options = "r:s:D:b:q:";
   const struct option long_options[] = {
     {"num-readers",1,NULL,'r'},
     {"num-searchers",1,NULL,'s'},
+    {"block-size",1,NULL,'b'},
+    {"queue-size",1,NULL,'q'},
     {"debug",1,NULL,'D'}};
 
   int next_opt = false;
@@ -380,6 +384,12 @@ int main(int argc,char * argv[])
                            short_options,long_options, NULL);
 
     switch(next_opt){
+    case 'b':
+      cfg.iovec_block_size = atoi(optarg);
+      break;
+    case 'q':
+      cfg.iovec_queue_size = atoi(optarg);
+      break;
     case 'r':
       cfg.num_readers = atoi(optarg);
       break;
@@ -417,7 +427,7 @@ int main(int argc,char * argv[])
   // Initialize Free Queue
   // Free from which blocks are taken and read into from files
   struct queue_head* free_iovec_queue = NULL;
-  free_iovec_queue = create_iovec_queue(FREE_QUEUE_SIZE,IOVEC_LEN);
+  free_iovec_queue = create_iovec_queue(cfg.iovec_queue_size,cfg.iovec_block_size);
   free_iovec_queue->free_data = free;
 
   // Queue containing file to be searched
@@ -480,10 +490,13 @@ void usage(FILE* stream, int exit_code)
   const struct description desc_arr[] = {
     {"-r[n]","--num-readers","Number of reader threads to use"},
     {"-s[n]","--num-searchers","Number of searcher threads to use"},
+    {"-b[n]","--block-size","size of blocks to on search queue"},
+    {"-q[n]","--queue-size","len free list  queue"},
+    {"-D[n]","--debug","verbosity of debug logs"}
   };
 
   int i = 0;
-  for(i = 0 ; i < 2;i++) {
+  for(i = 0 ; i < 4;i++) {
     fprintf(stream,"%-10s%-14s\t%-10s\n"
             ,desc_arr[i].short_option
             ,desc_arr[i].long_option
