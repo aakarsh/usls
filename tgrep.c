@@ -39,7 +39,7 @@
 #define MAX_FILE_NAME 2048
 
 
-struct config cfg;
+
 
 enum path_type {
   path_type_dir,
@@ -58,6 +58,8 @@ struct config
   int iovec_queue_size;
   enum path_type path_type;
 };
+
+struct config cfg;
 
 void config_init(struct config* cfg);
 
