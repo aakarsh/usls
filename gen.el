@@ -1,11 +1,52 @@
 ;; Prototype idea generating options parser
 
 ;; TODO : This should be generating code from ast rather than through
+
+;; TODO : Write a reader macro for commonly occuring statements
+
 ;; raw code and indentation insertion.
+
+
 
 (require 'cl)
 
 (defvar *outfile-format* "%s-arg-parse.h")
+
+(defun an-comma-sep(args)
+  (let ((r "")
+        (first t))    
+    (dolist (a args r)
+      (setq r (concat r (if (not first)",")  a))
+      (if first
+          (setq first nil)))))
+
+(defun an-string-rep(a)
+  (cond 
+   ((stringp a) (format "\"%s\"" a))
+   ((symbolp a) (format (symbol-name a)))
+   (t (format "%s" a))))
+
+(defmacro an-string-rep-args(&rest args)
+  (let ((res '()))
+    (dolist (r args res)
+      (setq res (cons  (an-string-rep r) res)))
+    (setq res (nreverse res))
+    (an-comma-sep res)))
+
+
+(defun an-str-n(s times)  
+  (let ((retval ""))
+  (dotimes (i times)
+    (setq retval (concat retval s))) retval))
+      
+(defmacro an-line(level &rest args)  
+  `(concat ,(an-str-n "\t" level) ,@args ";\n"))
+
+(defmacro an-line-(level &rest args)
+  `(concat ,(an-str-n "\t" level) ,@args "\n"))
+
+(defmacro an-line--(level &rest args)
+  `(concat ,(an-str-n "\t" level) ,@args ))
 
 (defmacro an-gen-line(&rest args)
   `(insert "\t" ,@args ";\n"))
@@ -55,6 +96,32 @@
   (insert "}\n\n"))
 
 
+(defmacro an-c(c level)
+    (cond 
+     ((not (listp c)) ;; raw insert
+      `(insert ,(format "%s" c)))
+     ((eq (car c) `do)      
+      `(concat 
+        (an-line- ,level "do {")
+        (an-c ,(cadr c) ,(+ 1 level))
+        (an-line- ,level (format "} while (%s)" ,(caddr c)))
+        ))
+     ((eq (car c) `if)
+      `(concat 
+        (an-line- ,level (format "if (%s) {" ,(cadr c)))
+        (an-c ,(caddr c) ,(+ 1 level))
+        (an-line- ,level "}")))
+     ((eq (car c) 'switch)
+      `(concat
+        (an-line- ,level (format "switch(%s) { " ,(cadr c)))        
+        (an-line ,level "}")))
+     (t ;; assume function call
+      `(concat
+        (an-line ,level (format "%s(%s)" ,(an-string-rep (car c)) (an-string-rep-args ,@(cdr c))))))
+     ;; method name
+))
+
+
 (defun an-gen-parse-args(args)
   (insert "\n\nvoid parse_args(int argc, char* argv[], struct config* cfg ) {\n")
   (an-gen-line "config_init(cfg)")
@@ -78,17 +145,34 @@
           (progn 
           (an-gen-line- (format "case '%s':" arg-short))
           (insert "\t") ;; indent
-          (an-gen-line (format "cfg.%s" arg-name) " = " 
+          (an-gen-line (format "cfg->%s" arg-name) " = " 
                         "atoi(optarg)")
           (an-gen-line "\tbreak")))
       ))
-  
+  (an-gen-line "case '?':  usage(stderr,-1)")
+  (an-gen-line "case -1:  break")
+  (an-gen-line- "default: ")
+  (an-gen-line "\tprintf(\"unexpected exit \")")
+  (an-gen-line "\tabort()")
   (an-gen-line "} //switch")
   (an-gen-line "} while(next_opt != -1)")
   (an-gen-line "int remaining_args = argc - optind")
 
-  (dolist (iopt (an-indexed-args args))
-    (
+  (let* ((iargs (an-indexed-args args))
+        (num   (length iargs)))
+    
+    (an-gen-line- (format "if(remaining_args < %d) {" num))
+    (an-gen-line (format  "\tfprintf(stderr, \"Insufficient  %d  args required  \\n\");" num))
+    (an-gen-line "\texit(-1)")
+    (an-gen-line- "}")
+
+    (dolist (arg iargs)
+      (an-gen-line 
+       (format "cfg->%s" (options-arg-name arg)) 
+       " = "
+       (format "argv[optind+%d]" (options-arg-index arg)))))
+
+  (an-gen-line "return cfg")
   
   (insert "}\n\n"))
 
@@ -96,7 +180,8 @@
   (let ((retval '()))
     (dolist (arg (options-parser-args args))
       (if (options-arg-index arg)
-          (setf retval (append retval arg)))) retval))
+          (setf retval (cons arg retval))))
+    (nreverse retval)))
 
 (defun an-gen-long-options(args)
   (insert "\n\tconst struct option long_option[] = {\n")  
@@ -133,6 +218,11 @@
                             (if arg-type 
                                  ":" "")))))))
   retval))    
+
+(defun an-gen-usage(args)
+  (an-gen-line "void usage(FILE* stream, int exit_code) {")
+
+  )
 
 (defun an-generate-parser(args)
   (let ((out-file (format *outfile-format* (options-parser-name args)  )))
