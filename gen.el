@@ -98,8 +98,10 @@
 
 (defmacro an-c(c level)
     (cond 
-     ((not (listp c)) ;; raw insert
-      `(insert ,(format "%s" c)))
+      ;;((not (listp c)) ;; raw insert
+;;      `(insert ,(format "%s" c)))
+     ((stringp c) ;; line insert
+      `(an-line ,level ,c))
      ((eq (car c) `do)      
       `(concat 
         (an-line- ,level "do {")
@@ -115,12 +117,27 @@
       `(concat
         (an-line- ,level (format "switch(%s) { " ,(cadr c)))        
         (an-line ,level "}")))
+     ((eq (car c) 'progn)
+      `(concat 
+        (an-c  ,(cadr c) ,level)
+        (an-c ,(caddr c) ,level)))
+     ((stringp (car c)) ;; raw insertion
+      `(concat 
+        (an-line ,level ,(car c))
+        (an-c ,(cdr c) ,level)))        
      (t ;; assume function call
       `(concat
         (an-line ,level (format "%s(%s)" ,(an-string-rep (car c)) (an-string-rep-args ,@(cdr c))))))
      ;; method name
 ))
 
+
+
+;; (an-c
+;;  (progn 
+;;    "next_opt = get_opt(\"foo\",bar)"
+;;    (fprintf "something" "something"))
+;; 1)
 
 (defun an-gen-parse-args(args)
   (insert "\n\nvoid parse_args(int argc, char* argv[], struct config* cfg ) {\n")
