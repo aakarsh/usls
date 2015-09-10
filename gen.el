@@ -2,8 +2,6 @@
 ;; TODO : This should be generating code from ast rather than through
 ;; TODO : Write a reader macro for commonly occuring statements
 ;; raw code and indentation insertion.
-
-
 (require 'cl)
 
 (defvar *outfile-format* "%s-arg-parse.h")
@@ -97,11 +95,16 @@
      ((not c) `"")
      ((stringp c) ;; line insert
       `(an-line- ,level ,c))
+     ((eq (car c) `defun)
+      `(an-c (progn ,(cadr c)
+               (block
+                   ,@(cddr c))) ,level)
+      )
      ((eq (car c) `do-while)      
       `(concat 
-        (an-line- ,level "do {")
-        (an-c ,(cadr c) ,(+ 1 level))
-        (an-line- ,level (format "} while (%s);" ,(caddr c)))
+        (an-line- ,level "do")
+        (an-c (block ,@(cddr c)) ,level)
+        (an-line- ,level (format " while (%s);" ,(cadr c)))
         ))
      ((eq (car c) `if)
       `(concat 
@@ -149,20 +152,17 @@
      ;; method name
 ))
 
-
 (defun an-build-case(arg-short arg-name)
-  (list 'case (format "'%s'" arg-short)
-    (list 'block (format "cfg->%s = %s " arg-name "atoi(optarg);") "break;")))
+  (let ((optstring (format "'%s'" arg-short)))
+    (list 'case optstring
+          (list 'block (format "cfg->%s = %s " arg-name "atoi(optarg);") "break;"))))
 
 (defun an-gen-case-statements(args)
   "Generate the case required case statements"
   (let ((r '()))
   (dolist (arg args)
-    (let ((arg-type (options-arg-type arg))
-          (arg-name (options-arg-name arg))
-          (arg-long (options-arg-long arg))
-          (arg-short (options-arg-short arg))
-          (arg-default (options-arg-default arg)))      
+    (let ((arg-name (options-arg-name arg))          
+          (arg-short (options-arg-short arg)))
       (if arg-short
             (setq r (cons (an-build-case arg-short arg-name) r))
         )))
@@ -170,44 +170,44 @@
 
 (defmacro an-gen-parse-args(uargs)
   (let ((args (eval uargs)))
-    `(insert (an-c
-      (progn         
-        "void parse_args(int argc, char* argv[], struct config* cfg)"
-        (block
+    `(insert 
+      (an-c
+       (defun  
+         "void parse_args(int argc, char* argv[], struct config* cfg)"
             "config_init(cfg);"
             "extern int optind;"
             "extern char* optarg;"           
-          (do-while 
-           (progn 
-             "next_opt = getopt_long(argc,argv,short_options,long_options,NULL);"
-             (switch "next_opt" 
-                     ,@(an-gen-case-statements args)
-                     (case "\'?\'"  
-                       (block 
-                         "usage(stderr,-1);" 
-                         "break;"))
-                     (case "-1"  
-                       (block  "break;"))
-                     (default  
-                       (block 
-                         "printf(\"unexpected exit \");"
-                         "abort();"))
-                     ))                     
-          "next_opt != -1")
-          "int remaining_args = argc - optind;"
-          ,@(let ((r '()))
-             (let* ((iargs (an-indexed-args args))
-                    (num   (length iargs)))
-               (setq r 
-                     (cons `(if ,(format "remaining_args < %d" num)
-                                ,(format "printf(stderr, \"Insufficient number of args %d args required  \\n\");" num)
-                                "exit(-1)")
-                           r))
-               (dolist (arg iargs)
-                 (setq r (cons (format "cfg->%s = argv[optind+%d];" (options-arg-name arg) (options-arg-index arg)) r)))
-             (nreverse r)))
-          "return cfg;"
-          )) 0))))
+            (do-while "next_opt != -1"
+               "next_opt = getopt_long(argc,argv,short_options,long_options,NULL);"
+               (switch "next_opt" 
+                       ,@(an-gen-case-statements args)
+                       (case "\'?\'"  
+                         (block 
+                             "usage(stderr,-1);" 
+                           "break;"))
+                       (case "-1"  
+                         (block  "break;"))
+                       (default  
+                         (block 
+                             "printf(\"unexpected exit \");"
+                           "abort();"))
+                       )                    
+             )
+            "int remaining_args = argc - optind;"
+            ,@(let ((r '()))
+                (let* ((iargs (an-indexed-args args))
+                       (num   (length iargs)))
+                  (setq r 
+                        (cons `(if ,(format "remaining_args < %d" num)
+                                   ,(format "printf(stderr, \"Insufficient number of args %d args required  \\n\");" num)
+                                 "exit(-1)")
+                              r))
+                  (dolist (arg iargs)
+                    (setq r (cons (format "cfg->%s = argv[optind+%d];" (options-arg-name arg) (options-arg-index arg)) r)))
+                  (nreverse r)))
+            "return cfg;"
+            ) 0))))
+
 
 
 (defun an-indexed-args(args)
