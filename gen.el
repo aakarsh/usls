@@ -1,11 +1,7 @@
 ;; Prototype idea generating options parser
-
 ;; TODO : This should be generating code from ast rather than through
-
 ;; TODO : Write a reader macro for commonly occuring statements
-
 ;; raw code and indentation insertion.
-
 
 
 (require 'cl)
@@ -32,7 +28,6 @@
       (setq res (cons  (an-string-rep r) res)))
     (setq res (nreverse res))
     (an-comma-sep res)))
-
 
 (defun an-str-n(s times)  
   (let ((retval ""))
@@ -77,6 +72,7 @@
           (arg-default (options-arg-default arg)))
       (an-gen-line (an-decl-type arg-type arg-type) " " arg-name)))
   (insert "};\n"))
+
 
 (defun an-gen-config-init(args)
   (insert "\n\nvoid config_init(struct config* cfg ) {\n")
@@ -186,7 +182,6 @@
              "next_opt = getopt_long(argc,argv,short_options,long_options,NULL);"
              (switch "next_opt" 
                      ,@(an-gen-case-statements args)
-
                      (case "\'?\'"  
                        (block 
                          "usage(stderr,-1);" 
@@ -197,15 +192,12 @@
                        (block 
                          "printf(\"unexpected exit \");"
                          "abort();"))
-                     ))
-                     
+                     ))                     
           "next_opt != -1")
           "int remaining_args = argc - optind;"
-
           ,@(let ((r '()))
-             (let* ((iargs (an-indexed-args2 args))
+             (let* ((iargs (an-indexed-args args))
                     (num   (length iargs)))
-
                (setq r 
                      (cons `(if ,(format "remaining_args < %d" num)
                                 ,(format "printf(stderr, \"Insufficient number of args %d args required  \\n\");" num)
@@ -218,19 +210,14 @@
           )) 0))))
 
 
-(defun an-indexed-args2(args)
+(defun an-indexed-args(args)
   (let ((retval '()))
     (dolist (arg  args)
       (if (options-arg-index arg)
           (setf retval (cons arg retval))))
     (nreverse retval)))
 
-(defun an-indexed-args(args)
-  (let ((retval '()))
-    (dolist (arg (options-parser-args args))
-      (if (options-arg-index arg)
-          (setf retval (cons arg retval))))
-    (nreverse retval)))
+
 
 (defun an-gen-long-options(args)
   (insert "\n\tconst struct option long_option[] = {\n")  
