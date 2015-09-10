@@ -100,7 +100,7 @@
     (cond 
      ((not c) `"")
      ((stringp c) ;; line insert
-      `(an-line ,level ,c))
+      `(an-line- ,level ,c))
      ((eq (car c) `do-while)      
       `(concat 
         (an-line- ,level "do {")
@@ -114,7 +114,21 @@
         (an-line- ,level "}")))
      ((eq (car c) 'switch)
       `(concat
-        (an-line- ,level (format "switch(%s) { " ,(cadr c)))        
+        (an-line- ,level (format "switch(%s) { " ,(cadr c)))
+        ,@(let ((r '()))
+           (dolist (cs (cddr c) r)
+             (if (eq 'default (car cs))
+                 (progn 
+                   `(concat 
+                     (an-line- ,level "default:")
+                     (an-c ,(cddr cs) ,(+ level 1))))               
+               (setq r 
+                   (cons 
+                    `(concat
+                      (an-line- ,level (format "case %s:" ,(cadr cs)))
+                      (an-c ,(cddr cs ) ,(+ level 1)))                    
+                      r))))
+           (nreverse r))
         (an-line ,level "}")))
      ((eq (car c) 'progn)
       `(concat 
@@ -124,48 +138,61 @@
      `(concat 
        (an-line- ,level "{")
        (an-c ,(cadr c)  ,(+ level 1))
-       (an-c ,(caddr c) ,(+ level 1))))
-     ((stringp (car c)) ;; raw insertion
+       (an-c ,(cdr (cdr c)) ,(+ level 1))
+       (an-line- ,level "}")))     
+     ;; ((stringp (car c)) ;; raw insertion
+     ;;  `(concat 
+     ;;    (an-line ,level ,(car c))
+     ;;    (an-c ,(cdr c) ,level)))
+     ((listp c) ;; fall back on progn semantics
       `(concat 
-        (an-line ,level ,(car c))
-        (an-c ,(cdr c) ,level)))        
-     (t ;; assume function call
+        (an-c  ,(car c) ,level)
+        (an-c ,(cdr c) ,level)))
+     (t ;; assume function call  <- this is a bad idea
       `(concat
         (an-line ,level (format "%s(%s)" ,(an-string-rep (car c)) (an-string-rep-args ,@(cdr c))))))
      ;; method name
 ))
 
 
+(defun an-build-case(arg-short arg-name)
+  (list 'case (format "'%s'" arg-short)
+    (list 'block (format "cfg->%s = %s " arg-name "atoi(optarg)") "break;")))
 
-(defun an-gen-parse-args2(args)
-  (an-c
-   (progn         
-     "void parse_args(int argc, char* argv[], struct config* cfg)"
-     (block
-       "config_init(cfg)"
-       "extern int optind"
-       "extern char* optarg"           
-       (do-while 
-        (progn 
-          "next_opt = getopt_long(argc,argv,short_options,long_options,NULL"      
-          )
-        "next_opt != -1")
-       )) 0))
+(defun an-gen-case-statements(args)
+  "Generate the case required case statements"
+  (let ((r '()))
+  (dolist (arg args)
+    (let ((arg-type (options-arg-type arg))
+          (arg-name (options-arg-name arg))
+          (arg-long (options-arg-long arg))
+          (arg-short (options-arg-short arg))
+          (arg-default (options-arg-default arg)))      
+      (if arg-short
+            (setq r (cons (an-build-case arg-short arg-name) r))
+        )))
+  (nreverse r)))
 
-(an-c 
- (switch 
-  "next_opt"
-  (
-         
-         ) 0)
-(an-c 
- (do-while 
-  (progn
-    "config_init(cfg)" 
-    "extern int optind"
-    "extern char* optarg")  
-  "condition") 0)
-(an-gen-parse-args2 (options-parser-args tgrep-options))
+(defmacro an-gen-parse-args2(uargs)
+  (let ((args (eval uargs)))
+    `(an-c
+      (progn         
+        "void parse_args(int argc, char* argv[], struct config* cfg)"
+        (block
+            "config_init(cfg);"
+            "extern int optind;"
+            "extern char* optarg;"           
+          (do-while 
+           (progn 
+             "next_opt = getopt_long(argc,argv,short_options,long_options,NULL);"
+             (switch "next_opt" 
+                     ,@(an-gen-case-statements args)
+                     )))
+          "next_opt != -1")) 0)))
+
+
+;;(an-gen-case-statements (options-parser-args tgrep-options))
+;;(an-gen-parse-args2 (options-parser-args tgrep-options))
 
 (defun an-gen-parse-args(args)
   (insert "\n\nvoid parse_args(int argc, char* argv[], struct config* cfg ) {\n")
