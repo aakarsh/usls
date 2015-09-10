@@ -117,17 +117,16 @@
         (an-line- ,level (format "switch(%s) { " ,(cadr c)))
         ,@(let ((r '()))
            (dolist (cs (cddr c) r)
-             (if (eq 'default (car cs))
-                 (progn 
-                   `(concat 
-                     (an-line- ,level "default:")
-                     (an-c ,(cddr cs) ,(+ level 1))))               
                (setq r 
-                   (cons 
-                    `(concat
-                      (an-line- ,level (format "case %s:" ,(cadr cs)))
-                      (an-c ,(cddr cs ) ,(+ level 1)))                    
-                      r))))
+                     (cons 
+                      (if (eq 'default (car cs))
+                          `(concat 
+                            (an-line- ,level "default:")
+                            (an-c ,(cdr cs) ,(+ level 1)))
+                        `(concat
+                          (an-line- ,level (format "case %s:" ,(cadr cs)))
+                          (an-c ,(cddr cs ) ,(+ level 1))))
+                        r)))
            (nreverse r))
         (an-line ,level "}")))
      ((eq (car c) 'progn)
@@ -175,7 +174,7 @@
 
 (defmacro an-gen-parse-args2(uargs)
   (let ((args (eval uargs)))
-    `(an-c
+    `(insert (an-c
       (progn         
         "void parse_args(int argc, char* argv[], struct config* cfg)"
         (block
@@ -187,12 +186,32 @@
              "next_opt = getopt_long(argc,argv,short_options,long_options,NULL);"
              (switch "next_opt" 
                      ,@(an-gen-case-statements args)
-                     )))
-          "next_opt != -1")) 0)))
+
+                     (case "\'?\'"  
+                       (block 
+                         "usage(stderr,-1);" 
+                         "break;"))
+                     (case "-1"  
+                       (block  "break;"))
+                     (default  
+                       (block 
+                         "printf(\"unexpected exit \");"
+                         "abort();"))
+                     ))
+                     
+          "next_opt != -1")
+          "int remaining_args = argc - optind;"
+          ,@(let ((r '()))
+             (let* ((iargs (an-indexed-args2 args))
+                    (num   (length iargs)))
+               (dolist (arg iargs)
+                 (setq r (cons (format "cfg->%s = argv[optind+%d]" (options-arg-name arg) (options-arg-index arg)) r))))
+             (nreverse r))
+)) 0))))
 
 
 ;;(an-gen-case-statements (options-parser-args tgrep-options))
-;;(an-gen-parse-args2 (options-parser-args tgrep-options))
+
 
 (defun an-gen-parse-args(args)
   (insert "\n\nvoid parse_args(int argc, char* argv[], struct config* cfg ) {\n")
@@ -247,6 +266,14 @@
   (an-gen-line "return cfg")
   
   (insert "}\n\n"))
+
+
+(defun an-indexed-args2(args)
+  (let ((retval '()))
+    (dolist (arg  args)
+      (if (options-arg-index arg)
+          (setf retval (cons arg retval))))
+    (nreverse retval)))
 
 (defun an-indexed-args(args)
   (let ((retval '()))
@@ -306,7 +333,7 @@
       (an-gen-config-init args)
       (insert "\n\n")
       (insert "\nstruct config cfg;\n")
-      (an-gen-parse-args args))))
+      (an-gen-parse-args2 (options-parser-args args)))))
 
 
 (defvar tgrep-options
