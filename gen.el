@@ -105,7 +105,7 @@
       `(concat 
         (an-line- ,level "do {")
         (an-c ,(cadr c) ,(+ 1 level))
-        (an-line- ,level (format "} while (%s)" ,(caddr c)))
+        (an-line- ,level (format "} while (%s);" ,(caddr c)))
         ))
      ((eq (car c) `if)
       `(concat 
@@ -156,7 +156,7 @@
 
 (defun an-build-case(arg-short arg-name)
   (list 'case (format "'%s'" arg-short)
-    (list 'block (format "cfg->%s = %s " arg-name "atoi(optarg)") "break;")))
+    (list 'block (format "cfg->%s = %s " arg-name "atoi(optarg);") "break;")))
 
 (defun an-gen-case-statements(args)
   "Generate the case required case statements"
@@ -172,7 +172,7 @@
         )))
   (nreverse r)))
 
-(defmacro an-gen-parse-args2(uargs)
+(defmacro an-gen-parse-args(uargs)
   (let ((args (eval uargs)))
     `(insert (an-c
       (progn         
@@ -201,71 +201,21 @@
                      
           "next_opt != -1")
           "int remaining_args = argc - optind;"
+
           ,@(let ((r '()))
              (let* ((iargs (an-indexed-args2 args))
                     (num   (length iargs)))
+
+               (setq r 
+                     (cons `(if ,(format "remaining_args < %d" num)
+                                ,(format "printf(stderr, \"Insufficient number of args %d args required  \\n\");" num)
+                                "exit(-1)")
+                           r))
                (dolist (arg iargs)
-                 (setq r (cons (format "cfg->%s = argv[optind+%d]" (options-arg-name arg) (options-arg-index arg)) r))))
-             (nreverse r))
-)) 0))))
-
-
-;;(an-gen-case-statements (options-parser-args tgrep-options))
-
-
-(defun an-gen-parse-args(args)
-  (insert "\n\nvoid parse_args(int argc, char* argv[], struct config* cfg ) {\n")
-  (an-gen-line "config_init(cfg)")
-  (an-gen-short-options args)
-  (an-gen-long-options args)
-
-  (an-gen-line "int next_opt")
-  (an-gen-line "extern int optind")
-  (an-gen-line "extern char* optarg")
-
-  (an-gen-line- "do {")
-  (an-gen-line "\tnext_opt = getopt_long(argc,argv,short_options,long_options,NULL)")  
-  (an-gen-line- "switch(next_opt) {")
-  (dolist (arg (options-parser-args args))
-    (let ((arg-type (options-arg-type arg))
-          (arg-name (options-arg-name arg))
-          (arg-long (options-arg-long arg))
-          (arg-short (options-arg-short arg))
-          (arg-default (options-arg-default arg)))
-      (if arg-short
-          (progn 
-          (an-gen-line- (format "case '%s':" arg-short))
-          (insert "\t") ;; indent
-          (an-gen-line (format "cfg->%s" arg-name) " = " 
-                        "atoi(optarg)")
-          (an-gen-line "\tbreak")))
-      ))
-  (an-gen-line "case '?':  usage(stderr,-1)")
-  (an-gen-line "case -1:  break")
-  (an-gen-line- "default: ")
-  (an-gen-line "\tprintf(\"unexpected exit \")")
-  (an-gen-line "\tabort()")
-  (an-gen-line "} //switch")
-  (an-gen-line "} while(next_opt != -1)")
-  (an-gen-line "int remaining_args = argc - optind")
-
-  (let* ((iargs (an-indexed-args args))
-        (num   (length iargs)))
-    
-    (an-gen-line- (format "if(remaining_args < %d) {" num))
-    (an-gen-line (format  "\tfprintf(stderr, \"Insufficient  %d  args required  \\n\");" num))
-    (an-gen-line "\texit(-1)")
-    (an-gen-line- "}")
-
-    (dolist (arg iargs)
-      (an-gen-line 
-       (format "cfg->%s" (options-arg-name arg)) 
-       " = "
-       (format "argv[optind+%d]" (options-arg-index arg)))))
-
-  (an-gen-line "return cfg")
-  
-  (insert "}\n\n"))
+                 (setq r (cons (format "cfg->%s = argv[optind+%d];" (options-arg-name arg) (options-arg-index arg)) r)))
+             (nreverse r)))
+          "return cfg;"
+          )) 0))))
 
 
 (defun an-indexed-args2(args)
@@ -333,7 +283,7 @@
       (an-gen-config-init args)
       (insert "\n\n")
       (insert "\nstruct config cfg;\n")
-      (an-gen-parse-args2 (options-parser-args args)))))
+      (an-gen-parse-args (options-parser-args args)))))
 
 
 (defvar tgrep-options
