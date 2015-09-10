@@ -75,7 +75,7 @@
     (let ((arg-type (options-arg-type arg))
           (arg-name (options-arg-name arg))
           (arg-default (options-arg-default arg)))
-      (an-gen-line (an-decl-type arg-type arg-type) " " arg-name)))                   
+      (an-gen-line (an-decl-type arg-type arg-type) " " arg-name)))
   (insert "};\n"))
 
 (defun an-gen-config-init(args)
@@ -98,11 +98,10 @@
 
 (defmacro an-c(c level)
     (cond 
-      ;;((not (listp c)) ;; raw insert
-;;      `(insert ,(format "%s" c)))
+     ((not c) `"")
      ((stringp c) ;; line insert
       `(an-line ,level ,c))
-     ((eq (car c) `do)      
+     ((eq (car c) `do-while)      
       `(concat 
         (an-line- ,level "do {")
         (an-c ,(cadr c) ,(+ 1 level))
@@ -121,6 +120,11 @@
       `(concat 
         (an-c  ,(cadr c) ,level)
         (an-c ,(caddr c) ,level)))
+     ((eq (car c) 'block)
+     `(concat 
+       (an-line- ,level "{")
+       (an-c ,(cadr c)  ,(+ level 1))
+       (an-c ,(caddr c) ,(+ level 1))))
      ((stringp (car c)) ;; raw insertion
       `(concat 
         (an-line ,level ,(car c))
@@ -133,11 +137,35 @@
 
 
 
-;; (an-c
-;;  (progn 
-;;    "next_opt = get_opt(\"foo\",bar)"
-;;    (fprintf "something" "something"))
-;; 1)
+(defun an-gen-parse-args2(args)
+  (an-c
+   (progn         
+     "void parse_args(int argc, char* argv[], struct config* cfg)"
+     (block
+       "config_init(cfg)"
+       "extern int optind"
+       "extern char* optarg"           
+       (do-while 
+        (progn 
+          "next_opt = getopt_long(argc,argv,short_options,long_options,NULL"      
+          )
+        "next_opt != -1")
+       )) 0))
+
+(an-c 
+ (switch 
+  "next_opt"
+  (
+         
+         ) 0)
+(an-c 
+ (do-while 
+  (progn
+    "config_init(cfg)" 
+    "extern int optind"
+    "extern char* optarg")  
+  "condition") 0)
+(an-gen-parse-args2 (options-parser-args tgrep-options))
 
 (defun an-gen-parse-args(args)
   (insert "\n\nvoid parse_args(int argc, char* argv[], struct config* cfg ) {\n")
