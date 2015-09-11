@@ -127,7 +127,7 @@
          "void parse_args(int argc, char* argv[], struct config* cfg)"
             "config_init(cfg);"
             "extern int optind;"
-            "extern char* optarg;"        
+            "extern char* optarg;"
             ,(an-gen-short-options args)   
             ,(an-gen-long-options args)
             (do-while "next_opt != -1"
@@ -144,8 +144,7 @@
                          (block 
                              "printf(\"unexpected exit \");"
                            "abort();"))
-                       )                    
-             )
+                       ))            
             "int remaining_args = argc - optind;"
             ,@(let ((r '()))
                 (let* ((indexed-args (an-indexed-args args))
