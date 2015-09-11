@@ -1,0 +1,226 @@
+;; Prototype idea generating options parser
+;; TODO : This should be generating code from ast rather than through
+;; TODO : Write a reader macro for commonly occuring statements
+;; raw code and indentation insertion.
+(require 'cl)
+(require 'c-gen)
+(require 's)
+
+
+(defvar *outfile-format* "%s-arg-parse.h")
+
+(defstruct options-arg
+  name index 
+  short long 
+  usage required type default)
+
+(defstruct options-parser name args)
+
+(defvar tgrep-options
+   (make-options-parser 
+    :name "tgrep" 
+    :args 
+    (list 
+     (make-options-arg 
+      :name "search_term"   :index 0
+      :usage "" 
+      :required t  :type 'string)
+     (make-options-arg 
+      :name "path"   :index 1
+      :usage "" 
+      :required t  :type 'string)
+     (make-options-arg 
+      :name "num_readers"  
+      :short "r"  :long "num_readers"   
+      :usage "Number of readers to run simultaneously" 
+      :default "1"
+      :required nil  :type 'int)
+     (make-options-arg 
+      :name "num_searchers"   
+      :short "s"  :long "num_searchers"   
+      :default "1"
+      :usage "Number of searchers to run simultaneously" 
+      :required nil  :type 'int)
+     (make-options-arg 
+      :name "debug"  
+      :short "D"  :long "debug-level"   
+      :usage "Debug verbosity" 
+      :required nil  :type 'int)
+     (make-options-arg 
+      :name "iovec_block_size"  
+      :short "b"  :long "block-size"   
+      :usage "Block size for debug queue" 
+      :required nil  :type 'int
+      :default "IOVEC_BLOCK_SIZE")
+     (make-options-arg 
+      :name "iovec_queue_size"   
+      :short "q"  :long "queue-size"   
+      :usage "Queue for debug queue" 
+      :required nil  :type 'int
+      :default "FREE_IOVEC_QUEUE_SIZE")
+     (make-options-arg 
+      :name "path_type" 
+      :short nil  :long nil
+      :usage nil
+      :required nil  :type "enum path_type"
+      :default "path_type_file"))))
+
+
+(defun an-filter(pred list)
+  (let ((retval '()))
+    (dolist (arg  args)
+      (if (funcall pred arg)
+          (setf retval (cons arg retval))))
+    (nreverse retval)))
+
+(defun an-indexed-args(args)
+  (an-filter (lambda(a) (options-arg-index a)) args))
+
+(defun args-struct-entry(arg)
+  (let ((type (an-decl-type (options-arg-type arg)))
+        (name (options-arg-name arg)))
+  (s-lex-format "${type} ${name};")))
+
+
+(defun args-struct-entries(args)
+  (mapcar 'args-struct-entry args))
+
+(defmacro an-gen-config-struct(uargs)
+  (let ((args (eval uargs)))
+    `(an-c 
+      (progn 
+        "struct config" (block ,@(args-struct-entries args))
+        ";") 0)))
+
+(defun an-config-init-arg(arg)
+  (let* ((default-value (options-arg-default arg))
+         (name  (options-arg-name arg))
+         (value (if default-value default-value
+                  (an-type-default-value (options-arg-type arg)))))
+    (s-lex-format "cfg->${name} = ${value};")))                       
+
+
+(defmacro an-gen-config-init(uargs)
+  (let ((args (eval uargs)))
+    `(an-c 
+      (defun "void config_init(struct config* cfg) "
+        ,@(mapcar 'an-config-init-arg args))      
+      0)))
+
+(defun an-build-case(arg-short arg-name)
+  (list 'case (s-lex-format "'${arg-short}'")
+        (list 'block 
+              (s-lex-format "cfg->${arg-name} = atoi(optarg) ;") 
+              "break;")))
+
+(defun an-gen-case-statements(args)
+  "Generate the case required case statements"
+  (let ((args-short (an-filter (lambda(a) (options-arg-short a)) args)))
+    (mapcar 
+     (lambda (a) 
+       (an-build-case (options-arg-short a) (options-arg-name a)))
+          args-short)))
+
+(defmacro an-gen-parse-args(uargs)
+  (let ((args (eval uargs)))
+    `(insert 
+      (an-c
+       (defun 
+         "void parse_args(int argc, char* argv[], struct config* cfg)"
+            "config_init(cfg);"
+            "extern int optind;"
+            "extern char* optarg;"           
+            (do-while "next_opt != -1"
+               "next_opt = getopt_long(argc,argv,short_options,long_options,NULL);"
+               (switch "next_opt" 
+                       ,@(an-gen-case-statements args)
+                       (case "\'?\'"  
+                         (block 
+                           "usage(stderr,-1);" 
+                           "break;"))
+                       (case "-1"  
+                         (block  "break;"))
+                       (default  
+                         (block 
+                             "printf(\"unexpected exit \");"
+                           "abort();"))
+                       )                    
+             )
+            "int remaining_args = argc - optind;"
+            ,@(let ((r '()))
+                (let* ((indexed-args (an-indexed-args args))
+                       (num   (length indexed-args)))
+                  (setq r 
+                        (cons `(if ,(format "remaining_args < %d" num)
+                                   ,(format "printf(stderr, \"Insufficient number of args %d args required  \\n\");" num)
+                                 "exit(-1)")
+                              r))                                    
+                  (dolist (arg indexed-args)
+                    (setq r (cons (format "cfg->%s = argv[optind+%d];" (options-arg-name arg) (options-arg-index arg)) r)))
+                  (nreverse r)))
+            "return cfg;"
+            ) 0))))
+
+(defun an-gen-long-options(args)
+  (insert "\n\tconst struct option long_option[] = {\n")  
+  (let ((first t))
+  (dolist (arg (options-parser-args args))
+    (let ((arg-type (options-arg-type arg))
+          (arg-name (options-arg-name arg))
+          (arg-long (options-arg-long arg))
+          (arg-short (options-arg-short arg))
+          (arg-default (options-arg-default arg)))
+      (if arg-longx
+          (progn 
+            (insert "\t\t")
+            (if (not first)
+                (insert ","))
+            (insert "{" (format "\"%s\"" arg-long) ",1,NULL," (format "\"%s\""arg-short) "}\n")      
+      (setq first nil)))))
+  (insert "\t};\n")))
+
+(defun an-gen-short-options(args)
+  (insert "\tconst char* short_options = "  (format "\"%s\"" (an-args-to-short-options args)) ";\n\n"))
+
+(defun an-args-to-short-options(args)
+  (let ((retval ""))
+  (dolist (arg (options-parser-args args))
+    (let ((arg-type (options-arg-type arg))
+          (arg-name (options-arg-name arg))
+          (arg-default (options-arg-default arg))
+          (arg-short (options-arg-short arg)))
+      (if arg-short
+      (setf retval 
+            (concat retval                    
+                    (concat arg-short 
+                            (if arg-type 
+                                 ":" "")))))))
+  retval))    
+
+(defun an-gen-usage(args)
+  (an-gen-line "void usage(FILE* stream, int exit_code) {")
+
+  )
+
+
+(defun an-generate-parser(args)
+  (let ((out-file (format *outfile-format* (options-parser-name args)  )))
+    (save-window-excursion
+      (find-file out-file)
+      (delete-region 1 (point-max)) ;; empty file
+      (insert (an-gen-config-struct (options-parser-args args)))
+      (insert "\n\n")
+
+      (insert (an-gen-config-init (options-parser-args args)))
+      (insert "\n\n")
+      (insert "\nstruct config cfg;\n")
+      (an-gen-parse-args (options-parser-args args)))))
+
+
+(defun gen-test()
+  (interactive)
+  (an-generate-parser tgrep-options))
+
+
+
+(provide 'gen-opts)

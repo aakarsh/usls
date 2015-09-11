@@ -57,7 +57,8 @@ struct config
   int iovec_block_size;
   int iovec_queue_size;
   enum path_type path_type;
-};
+}
+  ;
 
 struct config cfg;
 
