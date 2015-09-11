@@ -128,8 +128,7 @@
 
 (defmacro an-gen-parse-args(uargs)
   (let ((args (eval uargs)))
-    `(insert 
-      (an-c
+    `(an-c
        (defun 
          "void parse_args(int argc, char* argv[], struct config* cfg)"
             "config_init(cfg);"
@@ -166,7 +165,7 @@
                     (setq r (cons (format "cfg->%s = argv[optind+%d];" (options-arg-name arg) (options-arg-index arg)) r)))
                   (nreverse r)))
             "return cfg;"
-            ) 0))))
+            ) 0)))
 
 (defun an-gen-long-option-record(arg)
   (let ((arg-long (options-arg-long arg))
@@ -207,7 +206,7 @@
       (insert (an-gen-config-init (options-parser-args args)))
       (insert "\n\n")
       (insert "\nstruct config cfg;\n")
-      (an-gen-parse-args (options-parser-args args)))))
+      (insert (an-gen-parse-args (options-parser-args args))))))
 
 
 (defun gen-test()
