@@ -114,10 +114,10 @@
 
 (defun an-gen-case-statements(args)
   "Generate the case required case statements"
-  (loop for arg  in args
-        if (options-arg-short arg)
+  (loop for arg  in args   
         for arg-short = (options-arg-short arg)
         for arg-name = (options-arg-name arg)
+        if arg-short
         collect (an-build-case arg-short arg-name)))
 
 (defmacro an-gen-parse-args(uargs)
@@ -143,9 +143,10 @@
                        (default  
                          (block 
                              "printf(\"unexpected exit \");"
-                           "abort();"))
-                       ))            
+                           "abort();"))))            
+            
             "int remaining_args = argc - optind;"
+            
             ,@(let ((r '()))
                 (let* ((indexed-args (an-indexed-args args))
                        (num   (length indexed-args)))
@@ -157,7 +158,7 @@
                   (dolist (arg indexed-args)
                     (setq r (cons (format "cfg->%s = argv[optind+%d];" (options-arg-name arg) (options-arg-index arg)) r)))
                   (nreverse r)))
-            "return cfg;"
+            "return cfg;"     
             ) 0)))
 
 (defun an-gen-long-option-record(arg)
@@ -197,14 +198,14 @@
             )
          ,(format 
            "const struct description desc_arr[] = {%s};"
-             (loop for arg in args
-                   if (and (options-arg-usage arg) (not (eql (options-arg-usage  arg)"")))
+             (loop for arg in args                  
                    with fmt = (lambda(s l desc) 
                                 (s-lex-format "{\"${s}\",\"--${l}\",\"${desc}\"}"))
                    for s = (options-arg-short arg)
                    for l = (options-arg-long arg)
                    for desc = (options-arg-usage arg)
                    for rec  = (funcall fmt s l desc)
+                   if (and (options-arg-usage arg) (not (eql (options-arg-usage  arg)"")))
                    collect rec into records
                    finally return (s-join "," records)))         
          "int i = 0;"

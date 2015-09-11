@@ -8,8 +8,6 @@
       (if first
           (setq first nil)))))
 
-
-
 (defmacro an-string-rep-args(&rest args)
   (let ((res '()))
     (dolist (r args res)
