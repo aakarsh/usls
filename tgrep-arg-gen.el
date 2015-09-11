@@ -57,4 +57,10 @@
       :type "enum path_type"
       :default "path_type_file"))))
 
+(defun tgrep-arg-gen()
+  (interactive)
+  (an-generate-parser tgrep-options)
+  (princ "Generating Parser Done!!"))
+
+
 (provide 'tgrep-arg-gen)

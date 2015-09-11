@@ -176,7 +176,7 @@
 (defun an-generate-parser(args)
   (let ((out-file (format *outfile-format* (options-parser-name args)  )))
     (save-window-excursion
-      (find-file out-file)
+      (find-file (format "gen/%s" out-file))
       (delete-region 1 (point-max)) ;; empty file
       (insert (an-c (include "<getopt.h>") 0))
       (insert (an-c " void usage(FILE* stream, int exit_code);" 0))
@@ -191,9 +191,7 @@
 
 
 
-(defun gen-test()
-  (interactive)
-  (an-generate-parser tgrep-options))
+
 
 
 (provide 'gen-opts)

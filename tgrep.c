@@ -33,7 +33,7 @@
 
 #include "queue.h" 
 
-#include "tgrep-arg-parse.h"
+#include "gen/tgrep-arg-parse.h"
 
 /*
 #define FREE_IOVEC_QUEUE_SIZE 8192
@@ -391,33 +391,3 @@ int main(int argc,char * argv[])
   return 0;
 }
 
-
-/*
-void usage(FILE* stream, int exit_code)
-{
-  fprintf(stream,"Usage: %s  [search_term] [file/dir] \n",program_name);
-
-  struct description{
-    char* short_option;
-    char* long_option;
-    char* description;
-  };
-  
-  const struct description desc_arr[] = {
-    {"-r[n]","--num-readers","Number of reader threads to use"},
-    {"-s[n]","--num-searchers","Number of searcher threads to use"},
-    {"-b[n]","--block-size","size of blocks to on search queue"},
-    {"-q[n]","--queue-size","len free list  queue"},
-    {"-D[n]","--debug","verbosity of debug logs"}
-  };
-
-  int i = 0;
-  for(i = 0 ; i < 4;i++) {
-    fprintf(stream,"%-10s%-14s\t%-10s\n"
-            ,desc_arr[i].short_option
-            ,desc_arr[i].long_option
-            ,desc_arr[i].description);                
-  }
-  exit(exit_code);
-}
-*/
