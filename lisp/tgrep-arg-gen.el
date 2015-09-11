@@ -60,7 +60,7 @@
 (defun tgrep-arg-gen()
   (interactive)
   (an-generate-parser tgrep-options)
-  (princ "Generating Parser Done!!"))
+  (princ "Generating Parser Done!!!"))
 
 
 (provide 'tgrep-arg-gen)

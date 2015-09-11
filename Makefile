@@ -9,8 +9,8 @@ uls: usls.c
 	cp bin/* ~/bin
 	global -u
 
-tgrep-parser: c-gen.el gen-opts.el tgrep-arg-gen.el
-	emacsclient -e '(progn (load-file "c-gen.el") (load-file "gen-opts.el") (load-file "tgrep-arg-gen.el")  (tgrep-arg-gen))'
+tgrep-parser: lisp/c-gen.el lisp/gen-opts.el lisp/tgrep-arg-gen.el
+	emacsclient -e '(progn (load-file "lisp/c-gen.el") (load-file "lisp/gen-opts.el") (load-file "lisp/tgrep-arg-gen.el")  (tgrep-arg-gen))'
 
 tgrep: tgrep.c queue.h queue.c gen/tgrep-arg-parse.h tgrep-parser
 	gcc $(CFLAGS)  -g -Wall $(INCLUDE_FLAGS)  -o bin/tgrep queue.c queue.h tgrep.c  -pthread -lm
