@@ -27,11 +27,9 @@
     (list 
      (make-options-arg 
       :name "search_term"   :index 0
-      :usage "" 
       :required t  :type 'string)
      (make-options-arg 
       :name "path"   :index 1
-      :usage "" 
       :required t  :type 'string)
      (make-options-arg 
       :name "num_readers"  
@@ -64,9 +62,7 @@
       :default "FREE_IOVEC_QUEUE_SIZE")
      (make-options-arg 
       :name "path_type" 
-      :short nil  :long nil
-      :usage nil
-      :required nil  :type "enum path_type"
+      :type "enum path_type"
       :default "path_type_file"))))
 
 
@@ -103,7 +99,6 @@
                   (an-type-default-value (options-arg-type arg)))))
     (s-lex-format "cfg->${name} = ${value};")))                       
 
-
 (defmacro an-gen-config-init(uargs)
   (let ((args (eval uargs)))
     `(an-c 
@@ -124,7 +119,6 @@
         for arg-short = (options-arg-short arg)
         for arg-name = (options-arg-name arg)
         collect (an-build-case arg-short arg-name)))
-
 
 (defmacro an-gen-parse-args(uargs)
   (let ((args (eval uargs)))
@@ -190,11 +184,39 @@
         if arg-short
         concat (concat arg-short (if arg-type ":" ""))))      
 
-(defun an-gen-usage(args)
-  (an-gen-line "void usage(FILE* stream, int exit_code) {")
+ (defmacro an-gen-usage(uargs)
+   (let ((args (eval uargs)))
+     `(an-c 
+       (defun "void usage(FILE* stream, int exit_code)"
+         "fprintf(stream,\"Usage: tgrep  <options> [input file] \\n\");"
+         (progn "struct description"
+            (block
+                "char* short_option;"
+                "char* long_option;"
+                "char* description;")
+            ";"
+            )
+         ,(format 
+           "const struct description desc_arr[] = {%s};"
+             (loop for arg in args
+                   if (and (options-arg-usage arg) (not (eql (options-arg-usage  arg)"")))
+                   with fmt = (lambda(s l desc) 
+                                (s-lex-format "{\"${s}\",\"--${l}\",\"${desc}\"}"))
+                   for s = (options-arg-short arg)
+                   for l = (options-arg-long arg)
+                   for desc = (options-arg-usage arg)
+                   for rec  = (funcall fmt s l desc)
+                   collect rec into records
+                   finally return (s-join "," records)))         
+         "int i = 0;"
+         (progn "for(i = 0; i < 4 ; i++)"
+                (block
+                    "fprintf(stream,\"%-10s%-14s\\t%-10s\\n\",desc_arr[i].short_option,desc_arr[i].long_option,desc_arr[i].description);"))
+         "exit(exit_code);")
+       0)))
 
-  )
 
+;;(an-gen-usage (options-parser-args tgrep-options))
 
 (defun an-generate-parser(args)
   (let ((out-file (format *outfile-format* (options-parser-name args)  )))
@@ -206,13 +228,12 @@
       (insert (an-gen-config-init (options-parser-args args)))
       (insert "\n\n")
       (insert "\nstruct config cfg;\n")
-      (insert (an-gen-parse-args (options-parser-args args))))))
-
+      (insert (an-gen-parse-args (options-parser-args args)))
+      (insert (an-gen-usage (options-parser-args args)))
+      )))
 
 (defun gen-test()
   (interactive)
   (an-generate-parser tgrep-options))
-
-
 
 (provide 'gen-opts)
