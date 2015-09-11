@@ -18,53 +18,7 @@
   short long 
   usage required type default)
 
-(defstruct options-parser name args)
-
-(defvar tgrep-options
-   (make-options-parser 
-    :name "tgrep" 
-    :args 
-    (list 
-     (make-options-arg 
-      :name "search_term"   :index 0
-      :required t  :type 'string)
-     (make-options-arg 
-      :name "path"   :index 1
-      :required t  :type 'string)
-     (make-options-arg 
-      :name "num_readers"  
-      :short "r"  :long "num_readers"   
-      :usage "Number of readers to run simultaneously" 
-      :default "1"
-      :required nil  :type 'int)
-     (make-options-arg 
-      :name "num_searchers"   
-      :short "s"  :long "num_searchers"   
-      :default "1"
-      :usage "Number of searchers to run simultaneously" 
-      :required nil  :type 'int)
-     (make-options-arg 
-      :name "debug"  
-      :short "D"  :long "debug-level"   
-      :usage "Debug verbosity" 
-      :required nil  :type 'int)
-     (make-options-arg 
-      :name "iovec_block_size"  
-      :short "b"  :long "block-size"   
-      :usage "Block size for debug queue" 
-      :required nil  :type 'int
-      :default "IOVEC_BLOCK_SIZE")
-     (make-options-arg 
-      :name "iovec_queue_size"   
-      :short "q"  :long "queue-size"   
-      :usage "Queue for debug queue" 
-      :required nil  :type 'int
-      :default "FREE_IOVEC_QUEUE_SIZE")
-     (make-options-arg 
-      :name "path_type" 
-      :type "enum path_type"
-      :default "path_type_file"))))
-
+(defstruct options-parser name prelude args)
 
 (defun an-filter(pred list)
   (let ((retval '()))
@@ -124,10 +78,11 @@
   (let ((args (eval uargs)))
     `(an-c
        (defun 
-         "void parse_args(int argc, char* argv[], struct config* cfg)"
+         "struct config* parse_args(int argc, char* argv[], struct config* cfg)"
             "config_init(cfg);"
             "extern int optind;"
             "extern char* optarg;"
+            "int next_opt = 0;"
             ,(an-gen-short-options args)   
             ,(an-gen-long-options args)
             (do-while "next_opt != -1"
@@ -152,8 +107,8 @@
                        (num   (length indexed-args)))
                   (setq r 
                         (cons `(if ,(format "remaining_args < %d" num)
-                                   ,(format "printf(stderr, \"Insufficient number of args %d args required  \\n\");" num)
-                                 "exit(-1)")
+                                   ,(format "fprintf(stderr, \"Insufficient number of args %d args required  \\n\");" num)
+                                 "exit(-1);")
                               r))                                    
                   (dolist (arg indexed-args)
                     (setq r (cons (format "cfg->%s = argv[optind+%d];" (options-arg-name arg) (options-arg-index arg)) r)))
@@ -164,10 +119,10 @@
 (defun an-gen-long-option-record(arg)
   (let ((arg-long (options-arg-long arg))
         (arg-short (options-arg-short arg)))  
-    (s-lex-format "{\"${arg-long}\",1,NULL,\"${arg-short}\"}")))
+    (s-lex-format "{\"${arg-long}\",1,NULL,\'${arg-short}\'}")))
 
 (defun an-gen-long-options(args)
-  (format "const struct option long_option[] = {%s};"                
+  (format "const struct option long_options[] = {%s};"                
       (loop for arg in  args 
             if (options-arg-long arg)
             collect (an-gen-long-option-record arg) into records
@@ -223,17 +178,22 @@
     (save-window-excursion
       (find-file out-file)
       (delete-region 1 (point-max)) ;; empty file
+      (insert (an-c (include "<getopt.h>") 0))
+      (insert (an-c " void usage(FILE* stream, int exit_code);" 0))
+      (insert (options-parser-prelude args))
       (insert (an-gen-config-struct (options-parser-args args)))
-      (insert "\n\n")
-      (insert (an-gen-config-init (options-parser-args args)))
-      (insert "\n\n")
-      (insert "\nstruct config cfg;\n")
+      (insert (an-gen-config-init (options-parser-args args)))      
+      (insert (an-c  "struct config cfg;" 0))
       (insert (an-gen-parse-args (options-parser-args args)))
       (insert (an-gen-usage (options-parser-args args)))
+      (save-buffer)
       )))
+
+
 
 (defun gen-test()
   (interactive)
   (an-generate-parser tgrep-options))
+
 
 (provide 'gen-opts)

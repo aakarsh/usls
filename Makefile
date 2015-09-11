@@ -9,7 +9,7 @@ uls: usls.c
 	cp bin/* ~/bin
 	global -u
 
-tgrep: tgrep.c queue.h queue.c
+tgrep: tgrep.c queue.h queue.c tgrep-arg-parse.h
 	gcc $(CFLAGS)  -g -Wall $(INCLUDE_FLAGS)  -o bin/tgrep queue.c queue.h tgrep.c  -pthread -lm
 	cp bin/* ~/bin
 	global -u

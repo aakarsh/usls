@@ -33,36 +33,14 @@
 
 #include "queue.h" 
 
+#include "tgrep-arg-parse.h"
+
+/*
 #define FREE_IOVEC_QUEUE_SIZE 8192
 #define MAX_SEARCH_TERM_LEN 1024
 #define IOVEC_BLOCK_SIZE 4096
 #define MAX_FILE_NAME 2048
-
-
-
-
-enum path_type {
-  path_type_dir,
-  path_type_file,
-  path_type_stdin
-};  
-
-struct config 
-{
-  char* search_term;
-  char* path;
-  int num_readers;
-  int num_searchers;
-  int debug;
-  int iovec_block_size;
-  int iovec_queue_size;
-  enum path_type path_type;
-}
-  ;
-
-struct config cfg;
-
-void config_init(struct config* cfg);
+*/
 
 // List on which search is to conducted
 // Metadata of iovec we want to search
@@ -346,21 +324,6 @@ int get_num_processors(){
   return num_processors;
 }
 
-void config_init(struct config* cfg){
-  int num_processors = get_num_processors();
-
-  cfg->search_term = NULL;
-  cfg->path = NULL;
-  cfg->num_searchers= num_processors;
-  cfg->num_readers = num_processors;
-  cfg->debug = 0; //default debug level
-  cfg->iovec_block_size = IOVEC_BLOCK_SIZE;
-  cfg->iovec_queue_size = FREE_IOVEC_QUEUE_SIZE;
-  cfg->path_type = path_type_file;
-
-}
-
-
 char* program_name;
 
 void usage(FILE* stream, int exit_code);
@@ -369,61 +332,10 @@ void usage(FILE* stream, int exit_code);
 int main(int argc,char * argv[])
 {
   program_name = argv[0];
-  config_init(&cfg);
+  parse_args(argc,argv,&cfg);
 
-  const char* short_options = "r:s:D:b:q:";
-  const struct option long_options[] = {
-    {"num-readers",1,NULL,'r'},
-    {"num-searchers",1,NULL,'s'},
-    {"block-size",1,NULL,'b'},
-    {"queue-size",1,NULL,'q'},
-    {"debug",1,NULL,'D'}};
-
-  int next_opt = false;
-  extern int optind;
-  extern char *optarg;
-  do {
-    next_opt = getopt_long(argc,argv,
-                           short_options,long_options, NULL);
-
-    switch(next_opt){
-    case 'b':
-      cfg.iovec_block_size = atoi(optarg);
-      break;
-    case 'q':
-      cfg.iovec_queue_size = atoi(optarg);
-      break;
-    case 'r':
-      cfg.num_readers = atoi(optarg);
-      break;
-    case 's':
-      cfg.num_searchers = atoi(optarg);
-      break;
-    case 'D':
-      cfg.debug = atoi(optarg);
-      break;
-    case '?': // usage
-      usage(stderr,0);
-    case -1:
-      break;
-    default:
-      printf("unexpected exit");
-      abort();
-    }
-  } while (next_opt != -1);  
-
-  int remaining_args = argc - optind;
-    
-  if( remaining_args < 2) {
-    fprintf(stderr, "Usage: %s [search_term] [file_name] \n",argv[0]);
-    return -1;
-  }
-  
-  char* search_term = argv[optind];
-  char* read_from = argv[optind+1];
-
-  if(strlen(search_term) > MAX_SEARCH_TERM_LEN) {
-    fprintf(stderr,"search term %s is longer than %d \n",search_term,MAX_SEARCH_TERM_LEN);
+  if(strlen(cfg.search_term) > MAX_SEARCH_TERM_LEN) {
+    fprintf(stderr,"search term %s is longer than %d \n",cfg.search_term,MAX_SEARCH_TERM_LEN);
     return -1;
   }
 
@@ -441,7 +353,7 @@ int main(int argc,char * argv[])
   
   //find_file_paths
   struct transformer_info* file_finder = 
-    start_tranformers("finder",find_file_paths,read_from,
+    start_tranformers("finder",find_file_paths,cfg.read_from,
                       NULL,file_queue, 1);
 
   struct transformer_info* readers = 
@@ -449,7 +361,7 @@ int main(int argc,char * argv[])
                       file_queue,search_queue,cfg.num_readers);
 
   struct transformer_info* searchers = 
-    start_tranformers("searcher",search_transform,search_term,
+    start_tranformers("searcher",search_transform,cfg.search_term,
                        search_queue,free_iovec_queue,cfg.num_searchers);
   
   join_transformers(file_finder);
@@ -480,6 +392,7 @@ int main(int argc,char * argv[])
 }
 
 
+/*
 void usage(FILE* stream, int exit_code)
 {
   fprintf(stream,"Usage: %s  [search_term] [file/dir] \n",program_name);
@@ -507,3 +420,4 @@ void usage(FILE* stream, int exit_code)
   }
   exit(exit_code);
 }
+*/

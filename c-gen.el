@@ -73,9 +73,8 @@
         (an-line- ,level (format " while (%s);" ,(cadr c)))))     
      ((eq (car c) `if)
       `(concat 
-        (an-line- ,level (format "if (%s) {" ,(cadr c)))
-        (an-c ,(caddr c) ,(+ 1 level))
-        (an-line- ,level "}")))
+        (an-line- ,level (format "if (%s) " ,(cadr c)))
+        (an-c (block ,@(cddr c))  ,level)))
      ((eq (car c) 'switch)
       `(concat
         (an-line- ,level (format "switch(%s) { " ,(cadr c)))
