@@ -2,6 +2,10 @@
 ;; TODO : This should be generating code from ast rather than through
 ;; TODO : Write a reader macro for commonly occuring statements
 ;; raw code and indentation insertion.
+
+;; How I Learned to Stop Worrying and Love the Loop Macro
+;; http://www.ccs.neu.edu/home/shivers/papers/loop.pdf
+
 (require 'cl)
 (require 'c-gen)
 (require 's)
@@ -81,7 +85,6 @@
         (name (options-arg-name arg)))
   (s-lex-format "${type} ${name};")))
 
-
 (defun args-struct-entries(args)
   (mapcar 'args-struct-entry args))
 
@@ -89,7 +92,8 @@
   (let ((args (eval uargs)))
     `(an-c 
       (progn 
-        "struct config" (block ,@(args-struct-entries args))
+        "struct config" 
+        (block ,@(args-struct-entries args))
         ";") 0)))
 
 (defun an-config-init-arg(arg)
@@ -115,11 +119,12 @@
 
 (defun an-gen-case-statements(args)
   "Generate the case required case statements"
-  (let ((args-short (an-filter (lambda(a) (options-arg-short a)) args)))
-    (mapcar 
-     (lambda (a) 
-       (an-build-case (options-arg-short a) (options-arg-name a)))
-          args-short)))
+  (loop for arg  in args
+        if (options-arg-short arg)
+        for arg-short = (options-arg-short arg)
+        for arg-name = (options-arg-name arg)
+        collect (an-build-case arg-short arg-name)))
+
 
 (defmacro an-gen-parse-args(uargs)
   (let ((args (eval uargs)))
@@ -129,7 +134,9 @@
          "void parse_args(int argc, char* argv[], struct config* cfg)"
             "config_init(cfg);"
             "extern int optind;"
-            "extern char* optarg;"           
+            "extern char* optarg;"        
+            ,(an-gen-short-options args)   
+            ,(an-gen-long-options args)
             (do-while "next_opt != -1"
                "next_opt = getopt_long(argc,argv,short_options,long_options,NULL);"
                (switch "next_opt" 
@@ -161,41 +168,28 @@
             "return cfg;"
             ) 0))))
 
+(defun an-gen-long-option-record(arg)
+  (let ((arg-long (options-arg-long arg))
+        (arg-short (options-arg-short arg)))  
+    (s-lex-format "{\"${arg-long}\",1,NULL,\"${arg-short}\"}")))
+
 (defun an-gen-long-options(args)
-  (insert "\n\tconst struct option long_option[] = {\n")  
-  (let ((first t))
-  (dolist (arg (options-parser-args args))
-    (let ((arg-type (options-arg-type arg))
-          (arg-name (options-arg-name arg))
-          (arg-long (options-arg-long arg))
-          (arg-short (options-arg-short arg))
-          (arg-default (options-arg-default arg)))
-      (if arg-longx
-          (progn 
-            (insert "\t\t")
-            (if (not first)
-                (insert ","))
-            (insert "{" (format "\"%s\"" arg-long) ",1,NULL," (format "\"%s\""arg-short) "}\n")      
-      (setq first nil)))))
-  (insert "\t};\n")))
+  (format "const struct option long_option[] = {%s};"                
+      (loop for arg in  args 
+            if (options-arg-long arg)
+            collect (an-gen-long-option-record arg) into records
+            finally return (s-join "," records))))
 
 (defun an-gen-short-options(args)
-  (insert "\tconst char* short_options = "  (format "\"%s\"" (an-args-to-short-options args)) ";\n\n"))
+  (let ((sopts (an-args-to-short-options args)))
+    (s-lex-format "const char* short_options = \"${sopts}\";" )))
 
 (defun an-args-to-short-options(args)
-  (let ((retval ""))
-  (dolist (arg (options-parser-args args))
-    (let ((arg-type (options-arg-type arg))
-          (arg-name (options-arg-name arg))
-          (arg-default (options-arg-default arg))
-          (arg-short (options-arg-short arg)))
-      (if arg-short
-      (setf retval 
-            (concat retval                    
-                    (concat arg-short 
-                            (if arg-type 
-                                 ":" "")))))))
-  retval))    
+  (loop for arg in args
+        for arg-short = (options-arg-short arg)
+        for arg-type  = (options-arg-type arg)
+        if arg-short
+        concat (concat arg-short (if arg-type ":" ""))))      
 
 (defun an-gen-usage(args)
   (an-gen-line "void usage(FILE* stream, int exit_code) {")
@@ -210,7 +204,6 @@
       (delete-region 1 (point-max)) ;; empty file
       (insert (an-gen-config-struct (options-parser-args args)))
       (insert "\n\n")
-
       (insert (an-gen-config-init (options-parser-args args)))
       (insert "\n\n")
       (insert "\nstruct config cfg;\n")
